@@ -7,9 +7,13 @@ import {
   BarElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  ChartOptions,
+  Scale,
+  CoreScaleOptions,
+  Tick
 } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
+import { Bar, Line } from 'react-chartjs-2';
 
 ChartJS.register(
   CategoryScale,
@@ -104,6 +108,11 @@ const BudgetDashboard: React.FC = () => {
   // State for modals
   const [showExpenseModal, setShowExpenseModal] = useState<boolean>(false);
   const [showIncomeModal, setShowIncomeModal] = useState<boolean>(false);
+  
+  // State for chart controls
+  const [chartView, setChartView] = useState<'bar' | 'line' | 'stacked'>('bar');
+  const [compareMonth, setCompareMonth] = useState<string>('');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   
   // State for form data
   const [expenseFormData, setExpenseFormData] = useState<ExpenseFormData>({
@@ -762,22 +771,66 @@ const BudgetDashboard: React.FC = () => {
     'Other': '📌'
   };
 
+  // Update the chart data configuration
+  const chartData: {
+    labels: string[];
+    datasets: {
+      label: string;
+      data: number[];
+      backgroundColor: string;
+      borderColor: string;
+      borderWidth: number;
+      borderRadius: number;
+    }[];
+  } = {
+    labels: categories,
+    datasets: [
+      {
+        label: 'Budget',
+        data: categories.map(category => currentMonthBudget.categoryBudgets[category] || 0),
+        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+        borderColor: 'rgba(59, 130, 246, 0.8)',
+        borderWidth: 1,
+        borderRadius: 4
+      },
+      {
+        label: 'Actual',
+        data: categories.map(category => categorySpending[category] || 0),
+        backgroundColor: 'rgba(239, 68, 68, 0.5)',
+        borderColor: 'rgba(239, 68, 68, 0.8)',
+        borderWidth: 1,
+        borderRadius: 4
+      }
+    ]
+  };
+
   // Update the chart options to ensure proper display
-  const chartOptions = {
+  const chartOptions: ChartOptions<'bar'> = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false,
+    },
     scales: {
       y: {
         beginAtZero: true,
         title: {
           display: true,
-          text: 'Amount ($)'
+          text: 'Amount ($)',
+          color: '#9CA3AF',
+          font: {
+            size: 12
+          }
         },
         grid: {
           color: 'rgba(255, 255, 255, 0.1)'
         },
         ticks: {
-          color: '#9CA3AF'
+          color: '#9CA3AF',
+          callback: function(this: Scale<CoreScaleOptions>, tickValue: number | string) {
+            return `$${Number(tickValue).toLocaleString()}`;
+          }
         }
       },
       x: {
@@ -785,7 +838,10 @@ const BudgetDashboard: React.FC = () => {
           autoSkip: false,
           maxRotation: 45,
           minRotation: 45,
-          color: '#9CA3AF'
+          color: '#9CA3AF',
+          font: {
+            size: 11
+          }
         },
         grid: {
           color: 'rgba(255, 255, 255, 0.1)'
@@ -794,34 +850,45 @@ const BudgetDashboard: React.FC = () => {
     },
     plugins: {
       legend: {
-        position: 'top' as const,
+        position: 'top',
         labels: {
-          color: '#9CA3AF'
+          color: '#9CA3AF',
+          padding: 20,
+          usePointStyle: true,
+          pointStyle: 'circle',
+          font: {
+            size: 12
+          }
         }
       },
       title: {
         display: true,
         text: `Category Spending for ${formatMonthDisplay(selectedMonth)}`,
-        color: '#E5E7EB'
+        color: '#E5E7EB',
+        font: {
+          size: 16
+        }
       },
+      tooltip: {
+        backgroundColor: 'rgba(17, 24, 39, 0.8)',
+        titleColor: '#E5E7EB',
+        bodyColor: '#E5E7EB',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1,
+        padding: 12,
+        usePointStyle: true,
+        callbacks: {
+          label: (context: any) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            const category = context.label;
+            const budget = currentMonthBudget.categoryBudgets[category] || 0;
+            const percentage = budget > 0 ? ((value / budget) * 100).toFixed(1) : '0';
+            return `${label}: $${value.toLocaleString()} (${percentage}% of budget)`;
+          }
+        }
+      }
     }
-  };
-
-  // Update the chart data configuration
-  const chartData = {
-    labels: categories,
-    datasets: [
-      {
-        label: 'Budget',
-        data: categories.map(category => currentMonthBudget.categoryBudgets[category] || 0),
-        backgroundColor: 'rgba(59, 130, 246, 0.5)', // blue
-      },
-      {
-        label: 'Actual',
-        data: categories.map(category => categorySpending[category] || 0),
-        backgroundColor: 'rgba(239, 68, 68, 0.5)', // red
-      },
-    ],
   };
 
   // Add pagination controls component
@@ -904,6 +971,59 @@ const BudgetDashboard: React.FC = () => {
     if (previousMonthSpent === 0) return 0;
     return ((currentMonthSpent - previousMonthSpent) / previousMonthSpent) * 100;
   };
+
+  // Add these new chart configurations after the existing chartOptions
+  const trendChartOptions: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false,
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        display: false
+      },
+      x: {
+        display: false
+      }
+    },
+    plugins: {
+      legend: {
+        display: false
+      },
+      tooltip: {
+        enabled: true,
+        callbacks: {
+          label: (context) => {
+            return `${context.dataset.label}: $${context.parsed.y.toLocaleString()}`;
+          }
+        }
+      }
+    }
+  };
+
+  // Add trend chart data calculation
+  const trendChartData = useMemo(() => {
+    const last6Months = months.slice(-6);
+    return {
+      labels: last6Months.map(month => formatMonthDisplay(month).split(' ')[0]),
+      datasets: [
+        {
+          label: 'Total Spending',
+          data: last6Months.map(month => {
+            const expenses = expenseTransactions.filter(e => e.month === month);
+            return expenses.reduce((sum, e) => sum + e.amount, 0);
+          }),
+          borderColor: 'rgba(239, 68, 68, 0.8)',
+          backgroundColor: 'rgba(239, 68, 68, 0.2)',
+          tension: 0.4,
+          fill: true
+        }
+      ]
+    };
+  }, [months, expenseTransactions]);
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -1000,50 +1120,51 @@ const BudgetDashboard: React.FC = () => {
         
         {/* Budget vs Actual Chart */}
         <div className="bg-gray-800 rounded-lg shadow p-6 mb-8 border border-gray-700">
-          <h2 className="text-lg font-medium text-gray-200 mb-4">Budget vs. Actual Spending</h2>
-          <div className="h-96">
-            <Bar 
-              data={chartData} 
-              options={{
-                ...chartOptions,
-                scales: {
-                  ...chartOptions.scales,
-                  y: {
-                    ...chartOptions.scales.y,
-                    grid: {
-                      color: 'rgba(255, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                      color: '#9CA3AF'
-                    }
-                  },
-                  x: {
-                    ...chartOptions.scales.x,
-                    grid: {
-                      color: 'rgba(255, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                      color: '#9CA3AF'
-                    }
-                  }
-                },
-                plugins: {
-                  ...chartOptions.plugins,
-                  legend: {
-                    ...chartOptions.plugins.legend,
-                    labels: {
-                      color: '#9CA3AF'
-                    }
-                  }
-                }
-              }} 
-            />
+          <div className="flex flex-col space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-medium text-gray-200">Budget vs. Actual Spending</h2>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                  <span className="text-sm text-gray-300">Budget</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <span className="text-sm text-gray-300">Actual</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Main Chart */}
+            <div className="h-96">
+              <Bar 
+                data={chartData} 
+                options={chartOptions}
+              />
+            </div>
           </div>
         </div>
 
         {/* Credit Card Section */}
         <div className="bg-gray-800 rounded-lg shadow p-6 mb-8 border border-gray-700">
-          <h2 className="text-lg font-medium text-gray-200 mb-4">Credit Card Tracking</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-medium text-gray-200">Credit Card Tracking</h2>
+            <div className="flex items-center space-x-4">
+              <div className="text-right">
+                <span className="text-sm text-gray-400">Total Available Credit</span>
+                <p className="text-lg font-semibold text-green-400">
+                  ${(creditCards.reduce((sum, card) => sum + card.limit, 0) - 
+                     Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0)).toLocaleString()}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-sm text-gray-400">Total Credit Card Debt</span>
+                <p className="text-lg font-semibold text-red-400">
+                  ${Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead className="bg-gray-700">
@@ -1061,20 +1182,62 @@ const BudgetDashboard: React.FC = () => {
                   const monthlySpent = creditCardSpending[card.name] || 0;
                   const available = card.limit - monthlySpent;
                   const utilizationPercentage = (monthlySpent / card.limit) * 100;
+                  const today = new Date();
+                  const currentDay = today.getDate();
+                  const daysUntilStatement = card.statementDate - currentDay;
+                  const daysUntilDue = card.dueDate - currentDay;
+                  
+                  const getStatusColor = (percentage: number) => {
+                    if (percentage > 100) return 'bg-red-600';
+                    if (percentage > 80) return 'bg-yellow-600';
+                    return 'bg-green-600';
+                  };
+
+                  const getDateStatusColor = (days: number) => {
+                    if (days <= 0) return 'text-red-400';
+                    if (days <= 3) return 'text-yellow-400';
+                    return 'text-green-400';
+                  };
                   
                   return (
                     <tr key={index} className="hover:bg-gray-700">
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-200">{card.name}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-300">${card.limit.toLocaleString()}</td>
-                      <td className={`px-4 py-3 whitespace-nowrap text-sm text-right ${utilizationPercentage > 80 ? 'text-red-400' : 'text-gray-300'}`}>
-                        ${monthlySpent.toFixed(2)}
-                        <span className="text-xs ml-1">({utilizationPercentage.toFixed(1)}%)</span>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                        <div className="flex flex-col items-end">
+                          <span className={`${utilizationPercentage > 80 ? 'text-red-400' : 'text-gray-300'}`}>
+                            ${monthlySpent.toLocaleString()}
+                          </span>
+                          <div className="w-24 h-1.5 bg-gray-700 rounded-full mt-1">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${getStatusColor(utilizationPercentage)}`}
+                              style={{ width: `${Math.min(utilizationPercentage, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-gray-400 mt-1">
+                            {utilizationPercentage.toFixed(1)}% utilized
+                          </span>
+                        </div>
                       </td>
                       <td className={`px-4 py-3 whitespace-nowrap text-sm text-right ${available < 100 ? 'text-red-400' : 'text-green-400'}`}>
-                        ${available.toFixed(2)}
+                        ${available.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-300">{card.statementDate}<sup>th</sup></td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-300">{card.dueDate}<sup>th</sup></td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                        <span className={getDateStatusColor(daysUntilStatement)}>
+                          {card.statementDate}<sup>th</sup>
+                          <span className="text-xs ml-1">
+                            ({daysUntilStatement > 0 ? `${daysUntilStatement}d` : 'Past'})
+                          </span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                        <span className={getDateStatusColor(daysUntilDue)}>
+                          {card.dueDate}<sup>th</sup>
+                          <span className="text-xs ml-1">
+                            ({daysUntilDue > 0 ? `${daysUntilDue}d` : 'Past'})
+                          </span>
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}
@@ -1084,15 +1247,54 @@ const BudgetDashboard: React.FC = () => {
                     ${creditCards.reduce((sum, card) => sum + card.limit, 0).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-red-400">
-                    ${Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0).toFixed(2)}
+                    ${Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-green-400">
                     ${(creditCards.reduce((sum, card) => sum + card.limit, 0) - 
-                       Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0)).toFixed(2)}
+                       Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0)).toLocaleString()}
                   </td>
                   <td className="px-4 py-3"></td>
                   <td className="px-4 py-3"></td>
                 </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Income Table */}
+        <div className="bg-gray-800 rounded-lg shadow mb-8 border border-gray-700">
+          <div className="p-6 border-b border-gray-700">
+            <h2 className="text-lg font-medium text-gray-200">Income History</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
+                    {renderSortButton('income', 'Date', 'date')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
+                    {renderSortButton('income', 'Source', 'source')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
+                    {renderSortButton('income', 'Description', 'description')}
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">
+                    {renderSortButton('income', 'Amount', 'amount')}
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-gray-800 divide-y divide-gray-700">
+                {sortedIncome.map(income => (
+                  <tr key={income.id} className="group hover:bg-gray-700">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.date}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.source}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.description}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-400">+${income.amount.toFixed(2)}</td>
+                    {renderIncomeActions(income)}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1313,45 +1515,6 @@ const BudgetDashboard: React.FC = () => {
                 </table>
               </div>
               <PaginationControls />
-            </div>
-            
-            {/* Income Table */}
-            <div className="bg-gray-800 rounded-lg shadow border border-gray-700">
-              <div className="p-6 border-b border-gray-700">
-                <h2 className="text-lg font-medium text-gray-200">Income History</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('income', 'Date', 'date')}
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('income', 'Source', 'source')}
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('income', 'Description', 'description')}
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('income', 'Amount', 'amount')}
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-gray-800 divide-y divide-gray-700">
-                    {sortedIncome.map(income => (
-                      <tr key={income.id} className="group hover:bg-gray-700">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.date}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.source}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.description}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-400">+${income.amount.toFixed(2)}</td>
-                        {renderIncomeActions(income)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
           </div>
           
