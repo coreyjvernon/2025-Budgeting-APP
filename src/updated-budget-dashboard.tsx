@@ -37,8 +37,9 @@ interface Transaction {
   id: string;
   date: string;
   category: string;
-  amount: number;
   description: string;
+  amount: number;
+  isCredit: boolean;
   paymentMethod: string;
   month: string;
 }
@@ -148,9 +149,10 @@ const BudgetDashboard: React.FC = () => {
           id: expense.id || '',
           date: expense.date,
           category: expense.category,
-          amount: expense.amount,
           description: expense.description,
-          paymentMethod: expense.paymentMethod || 'Cash',
+          amount: expense.amount,
+          isCredit: expense.paymentMethod?.includes('Credit') || false,
+          paymentMethod: expense.paymentMethod,
           month: expense.date.substring(0, 7)
         })));
 
@@ -559,62 +561,48 @@ const BudgetDashboard: React.FC = () => {
   // Form handlers
   const handleExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
-      const newExpense: Omit<Expense, 'id'> = {
+      const newExpense = {
         date: expenseFormData.date,
         category: expenseFormData.category,
-        amount: parseFloat(expenseFormData.amount),
         description: expenseFormData.description,
-        paymentMethod: expenseFormData.paymentMethod || 'Cash' // Default to 'Cash' if not specified
+        amount: parseFloat(expenseFormData.amount),
+        paymentMethod: expenseFormData.paymentMethod || 'Cash',
+        isCredit: expenseFormData.paymentMethod?.includes('Credit') || false
       };
 
-      await budgetService.addExpense(newExpense);
-      
-      // Refresh expenses
-      const expenses = await budgetService.getExpenses();
-      setExpenseTransactions(expenses.map(expense => ({
-        id: expense.id || '',
-        date: expense.date,
-        category: expense.category,
-        amount: expense.amount,
-        description: expense.description,
-        paymentMethod: expense.paymentMethod || 'Cash', // Ensure paymentMethod is always set
-        month: expense.date.substring(0, 7)
-      })));
+      const expenseId = await budgetService.addExpense(newExpense);
+      const formattedExpense: Transaction = {
+        id: expenseId,
+        ...newExpense,
+        month: newExpense.date.substring(0, 7)
+      };
 
-      // Update budget summary
-      const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-      setBudgetSummary(prev => ({
-        ...prev,
-        regularSpent: totalSpent,
-        spendingPercentage: (totalSpent / prev.regularBudget) * 100
-      }));
-
-      // Update credit card tracking if payment method is a credit card
-      if (expenseFormData.paymentMethod.includes('Credit')) {
-        const cardName = expenseFormData.paymentMethod.split('(')[0].trim();
-        setCreditCards(prev => prev.map(card => {
-          if (card.name === cardName) {
-            return {
-              ...card,
-              spent: card.spent + parseFloat(expenseFormData.amount)
-            };
-          }
-          return card;
-        }));
-      }
-
-      setShowExpenseModal(false);
+      setExpenseTransactions(prev => [...prev, formattedExpense]);
+      setBudgetSummary(prev => {
+        const newRegularSpent = prev.regularSpent + newExpense.amount;
+        const newCreditSpent = newExpense.isCredit ? prev.creditSpent + newExpense.amount : prev.creditSpent;
+        const newTotalSpent = newRegularSpent + newCreditSpent;
+        
+        return {
+          ...prev,
+          regularSpent: newRegularSpent,
+          creditSpent: newCreditSpent,
+          totalSpent: newTotalSpent,
+          spendingPercentage: (newTotalSpent / prev.regularBudget) * 100
+        };
+      });
       setExpenseFormData({
         date: '',
         category: '',
-        amount: '',
         description: '',
-        paymentMethod: ''
+        amount: '',
+        paymentMethod: 'Cash'
       });
+      setShowExpenseModal(false);
     } catch (error) {
       console.error('Error adding expense:', error);
+      alert('Failed to add expense. Please try again.');
     }
   };
 
@@ -718,53 +706,10 @@ const BudgetDashboard: React.FC = () => {
 
     try {
       if (deleteConfirmation.type === 'expense') {
-        // Delete the expense from Firestore
-        await budgetService.deleteExpense(deleteConfirmation.id);
-        
-        // Update local state by removing the deleted expense
-        setExpenseTransactions(prev => prev.filter(expense => expense.id !== deleteConfirmation.id));
-        
-        // Update budget summary
-        const remainingExpenses = expenseTransactions.filter(expense => expense.id !== deleteConfirmation.id);
-        const totalSpent = remainingExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-        setBudgetSummary(prev => ({
-          ...prev,
-          regularSpent: totalSpent,
-          spendingPercentage: (totalSpent / prev.regularBudget) * 100
-        }));
-
-        // Update credit card tracking
-        const creditCardExpenses = remainingExpenses.filter(expense => expense.paymentMethod?.includes('Credit'));
-        setCreditCards(prev => prev.map(card => {
-          const cardExpenses = creditCardExpenses.filter(expense => 
-            expense.paymentMethod?.startsWith(card.name)
-          );
-          const totalSpent = cardExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-          return { ...card, spent: totalSpent };
-        }));
-
-        // Reset to first page if we're on a page that no longer exists
-        if (currentPage > Math.ceil((remainingExpenses.length - 1) / transactionsPerPage)) {
-          setCurrentPage(1);
-        }
+        await handleDeleteExpense(deleteConfirmation.id);
       } else {
-        // Delete the income from Firestore
-        await budgetService.deleteIncome(deleteConfirmation.id);
-        
-        // Update local state by removing the deleted income
-        setIncomeTransactions(prev => prev.filter(income => income.id !== deleteConfirmation.id));
-        
-        // Update budget summary
-        const remainingIncome = incomeTransactions.filter(income => income.id !== deleteConfirmation.id);
-        const totalIncome = remainingIncome.reduce((sum, income) => sum + income.amount, 0);
-        setBudgetSummary(prev => ({
-          ...prev,
-          income: totalIncome,
-          totalIncome
-        }));
+        await handleDeleteIncome(deleteConfirmation.id);
       }
-
-      // Close the confirmation modal
       setDeleteConfirmation({ show: false, type: 'expense', id: null });
     } catch (error) {
       console.error('Error deleting item:', error);
@@ -792,9 +737,10 @@ const BudgetDashboard: React.FC = () => {
         id: expense.id || '',
         date: expense.date,
         category: expense.category,
-        amount: expense.amount,
         description: expense.description,
-        paymentMethod: expense.paymentMethod || 'Cash',
+        amount: expense.amount,
+        isCredit: expense.paymentMethod?.includes('Credit') || false,
+        paymentMethod: expense.paymentMethod,
         month: expense.date.substring(0, 7)
       })));
 
@@ -833,8 +779,12 @@ const BudgetDashboard: React.FC = () => {
 
   // Update the date formatting in the Recent Expenses section
   const formatDate = (dateString: string) => {
-    const [year, month, day] = dateString.split('-');
-    return `${month}/${day}/${year}`;
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    });
   };
 
   // Update the delete and edit handlers
@@ -1008,10 +958,7 @@ const BudgetDashboard: React.FC = () => {
           <PencilIcon className="h-5 w-5" />
         </button>
         <button
-          onClick={() => {
-            console.log('Delete button clicked for expense:', expense.id);
-            handleDeleteClick(expense.id, 'expense');
-          }}
+          onClick={() => handleDeleteClick(expense.id, 'expense')}
           className="text-red-400 hover:text-red-300"
         >
           <TrashIcon className="h-5 w-5" />
@@ -1153,6 +1100,83 @@ const BudgetDashboard: React.FC = () => {
         </div>
       </div>
     );
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    try {
+      await budgetService.deleteExpense(expenseId);
+      setExpenseTransactions(prevExpenses => prevExpenses.filter(expense => expense.id !== expenseId));
+      
+      // Update budget summary
+      const deletedExpense = expenseTransactions.find(expense => expense.id === expenseId);
+      if (deletedExpense) {
+        setBudgetSummary(prev => {
+          const newRegularSpent = prev.regularSpent - deletedExpense.amount;
+          const newCreditSpent = deletedExpense.isCredit ? prev.creditSpent - deletedExpense.amount : prev.creditSpent;
+          const newTotalSpent = newRegularSpent + newCreditSpent;
+          
+          return {
+            ...prev,
+            regularSpent: newRegularSpent,
+            creditSpent: newCreditSpent,
+            totalSpent: newTotalSpent,
+            spendingPercentage: (newTotalSpent / prev.regularBudget) * 100
+          };
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      alert('Failed to delete expense. Please try again.');
+    }
+  };
+
+  const handleDeleteExpenseClick = (expenseId: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    handleDeleteExpense(expenseId);
+  };
+
+  const handleDeleteIncome = async (incomeId: string) => {
+    try {
+      await budgetService.deleteIncome(incomeId);
+      setIncomeTransactions(prevIncome => prevIncome.filter(income => income.id !== incomeId));
+      
+      // Update budget summary
+      const deletedIncome = incomeTransactions.find(income => income.id === incomeId);
+      if (deletedIncome) {
+        setBudgetSummary(prev => ({
+          ...prev,
+          income: prev.income - deletedIncome.amount,
+          totalIncome: prev.totalIncome - deletedIncome.amount
+        }));
+      }
+    } catch (error) {
+      console.error('Error deleting income:', error);
+      alert('Failed to delete income. Please try again.');
+    }
+  };
+
+  const handleDeleteIncomeClick = (incomeId: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    handleDeleteIncome(incomeId);
+  };
+
+  const sortTransactions = (transactions: Transaction[], field: keyof Transaction, direction: number) => {
+    return [...transactions].sort((a, b) => {
+      switch (field) {
+        case 'date':
+          return direction * (new Date(a.date).getTime() - new Date(b.date).getTime());
+        case 'category':
+          return direction * a.category.localeCompare(b.category);
+        case 'description':
+          return direction * a.description.localeCompare(b.description);
+        case 'paymentMethod':
+          return direction * a.paymentMethod.localeCompare(b.paymentMethod);
+        case 'amount':
+          return direction * (a.amount - b.amount);
+        default:
+          return 0;
+      }
+    });
   };
 
   return (
