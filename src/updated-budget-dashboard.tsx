@@ -14,6 +14,7 @@ import {
   Tick
 } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
+import { budgetService, Expense, Budget, Income } from './services/budgetService';
 
 ChartJS.register(
   CategoryScale,
@@ -33,7 +34,7 @@ interface CreditCard {
 }
 
 interface Transaction {
-  id: number;
+  id: string;
   date: string;
   category: string;
   amount: number;
@@ -43,7 +44,7 @@ interface Transaction {
 }
 
 interface IncomeTransaction {
-  id: number;
+  id: string;
   date: string;
   source: string;
   description: string;
@@ -63,6 +64,9 @@ interface BudgetSummary {
   regularBudget: number;
   regularSpent: number;
   spendingPercentage: number;
+  totalIncome: number;
+  creditBudget: number;
+  creditSpent: number;
 }
 
 interface ExpenseFormData {
@@ -83,7 +87,7 @@ interface IncomeFormData {
 interface DeleteConfirmation {
   show: boolean;
   type: 'expense' | 'income';
-  id: number | null;
+  id: string | null;
 }
 
 interface SortConfig {
@@ -131,47 +135,74 @@ const BudgetDashboard: React.FC = () => {
   });
 
   // State for transactions
-  const [expenseTransactions, setExpenseTransactions] = useState<Transaction[]>([
-    { id: 1, date: "03/01/2025", category: "Rent", amount: 2232.53, description: "Rent", paymentMethod: "Capital Five (Credit)", month: "2025-03" },
-    { id: 2, date: "03/01/2025", category: "Wellness", amount: 79.48, description: "Rappi - pharmacy", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 3, date: "03/01/2025", category: "Groceries", amount: 6.61, description: "Food Lion", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 4, date: "03/02/2025", category: "Storage", amount: 278.77, description: "StorQuest", paymentMethod: "Capital Five (Credit)", month: "2025-03" },
-    { id: 5, date: "03/02/2025", category: "Groceries", amount: 79.48, description: "Rappi", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 6, date: "03/03/2025", category: "Rent", amount: 14.00, description: "iPostal1", paymentMethod: "Quicksilver One (Credit)", month: "2025-03" },
-    { id: 7, date: "03/03/2025", category: "Subscriptions", amount: 12.99, description: "Proton", paymentMethod: "Quicksilver One (Credit)", month: "2025-03" },
-    { id: 8, date: "03/03/2025", category: "Business", amount: 50.00, description: "Harvard Business", paymentMethod: "Quicksilver One (Credit)", month: "2025-03" },
-    { id: 9, date: "03/03/2025", category: "Transportation", amount: 10.30, description: "Uber", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 10, date: "03/04/2025", category: "Subscriptions", amount: 20.00, description: "Claude AI", paymentMethod: "Quicksilver One (Credit)", month: "2025-03" },
-    { id: 11, date: "03/04/2025", category: "Eating Out", amount: 61.24, description: "Rappi", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 12, date: "03/05/2025", category: "Transportation", amount: 27.22, description: "Uber", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 13, date: "03/05/2025", category: "Transportation", amount: 20.00, description: "Gas", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 14, date: "03/06/2025", category: "Melany", amount: 189.71, description: "Western Union", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 15, date: "03/06/2025", category: "Business", amount: 14.60, description: "USPS - stamps", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 16, date: "03/06/2025", category: "Transportation", amount: 20.37, description: "Uber", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 17, date: "03/06/2025", category: "Melany", amount: 53.99, description: "Western Union", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 18, date: "03/06/2025", category: "Entertainment", amount: 20.36, description: "Netflix", paymentMethod: "PayPal (Check)", month: "2025-03" },
-    { id: 19, date: "03/07/2025", category: "Eating Out", amount: 113.17, description: "Rappi", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 20, date: "03/07/2025", category: "Entertainment", amount: 19.23, description: "Spotify", paymentMethod: "PayPal (Check)", month: "2025-03" },
-    { id: 21, date: "03/07/2025", category: "Wardrobe", amount: 38.50, description: "Amiri", paymentMethod: "PayPal (Check)", month: "2025-03" },
-    { id: 22, date: "03/07/2025", category: "Mom", amount: 795.00, description: "Mom", paymentMethod: "360 (Debit)", month: "2025-03" },
-    { id: 23, date: "03/08/2025", category: "Entertainment", amount: 16.99, description: "Max", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 24, date: "03/08/2025", category: "Subscriptions", amount: 6.99, description: "1Password", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 25, date: "03/08/2025", category: "Wardrobe", amount: 40.50, description: "Under Armor", paymentMethod: "PayPal (Check)", month: "2025-03" },
-    { id: 26, date: "03/08/2025", category: "Eating Out", amount: 25.02, description: "Rappi", paymentMethod: "Quicksilver One (Credit)", month: "2025-03" },
-    { id: 27, date: "03/08/2025", category: "Entertainment", amount: 19.99, description: "HBO Max", paymentMethod: "Capital One (Credit)", month: "2025-03" },
-    { id: 28, date: "03/13/2025", category: "Savings", amount: 50.00, description: "Goldman Sachs", paymentMethod: "360 (Debit)", month: "2025-03" }
-  ]);
+  const [expenseTransactions, setExpenseTransactions] = useState<Transaction[]>([]);
+  const [incomeTransactions, setIncomeTransactions] = useState<IncomeTransaction[]>([]);
 
-  const [incomeTransactions, setIncomeTransactions] = useState<IncomeTransaction[]>([
-    { id: 1, date: "03/01/2025", source: "Tricentis", description: "Salary", amount: 4084.16, month: "2025-03" }
-  ]);
-  
+  // Load data from Firebase on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load expenses
+        const expenses = await budgetService.getExpenses();
+        setExpenseTransactions(expenses.map(expense => ({
+          id: expense.id || '',
+          date: expense.date,
+          category: expense.category,
+          amount: expense.amount,
+          description: expense.description,
+          paymentMethod: expense.paymentMethod || 'Cash',
+          month: expense.date.substring(0, 7)
+        })));
+
+        // Load income
+        const income = await budgetService.getIncome();
+        const formattedIncome = income.map(item => ({
+          id: item.id || '',
+          date: item.date,
+          source: item.source,
+          description: item.description,
+          amount: item.amount,
+          month: item.date.substring(0, 7)
+        }));
+        setIncomeTransactions(formattedIncome);
+
+        // Initialize credit card spent amounts
+        const creditCardExpenses = expenses.filter(expense => expense.paymentMethod?.includes('Credit'));
+        setCreditCards(prev => prev.map(card => {
+          const cardExpenses = creditCardExpenses.filter(expense => 
+            expense.paymentMethod?.startsWith(card.name)
+          );
+          const totalSpent = cardExpenses.reduce((sum: number, expense) => sum + expense.amount, 0);
+          return { ...card, spent: totalSpent };
+        }));
+
+        // Update budget summary
+        const totalSpent = expenses.reduce((sum: number, expense) => sum + expense.amount, 0);
+        const totalIncome = income.reduce((sum: number, item) => sum + item.amount, 0);
+        setBudgetSummary(prev => ({
+          ...prev,
+          regularSpent: totalSpent,
+          spendingPercentage: (totalSpent / prev.regularBudget) * 100,
+          income: totalIncome,
+          totalIncome
+        }));
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
+    };
+
+    loadData();
+  }, []);
+
   // Budget summary state
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummary>({
     income: 0,
     regularBudget: 9401.00,
     regularSpent: 0,
-    spendingPercentage: 0
+    spendingPercentage: 0,
+    totalIncome: 0,
+    creditBudget: 0,
+    creditSpent: 0
   });
 
   // State for delete confirmation
@@ -184,6 +215,8 @@ const BudgetDashboard: React.FC = () => {
   // State for editing
   const [editingExpense, setEditingExpense] = useState<Transaction | null>(null);
   const [editingIncome, setEditingIncome] = useState<IncomeTransaction | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [tempBudgetValue, setTempBudgetValue] = useState<string>('');
 
   // Sorting and filtering state
   const [expenseSortConfig, setExpenseSortConfig] = useState<SortConfig>({ key: 'date', direction: 'desc' });
@@ -196,7 +229,7 @@ const BudgetDashboard: React.FC = () => {
 
   // Add pagination state after other state declarations
   const [currentPage, setCurrentPage] = useState(1);
-  const transactionsPerPage = 10;
+  const transactionsPerPage = 5; // Changed from 10 to 5 to match the UI
 
   // Generate list of months for 2025
   const months = useMemo(() => {
@@ -301,7 +334,7 @@ const BudgetDashboard: React.FC = () => {
     const startIndex = (currentPage - 1) * transactionsPerPage;
     const endIndex = startIndex + transactionsPerPage;
     return filteredAndSortedExpenses.slice(startIndex, endIndex);
-  }, [filteredAndSortedExpenses, currentPage]);
+  }, [filteredAndSortedExpenses, currentPage, transactionsPerPage]);
 
   const totalPages = Math.ceil(filteredAndSortedExpenses.length / transactionsPerPage);
 
@@ -409,46 +442,43 @@ const BudgetDashboard: React.FC = () => {
     const totalBudget = Object.values(currentMonthBudget.categoryBudgets).reduce((sum, budget) => sum + budget, 0);
     const spendingPercentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
-    setBudgetSummary({
-      income: totalIncome,
-      regularBudget: totalBudget,
+    setBudgetSummary(prev => ({
+      ...prev,
       regularSpent: totalSpent,
       spendingPercentage: spendingPercentage
-    });
+    }));
   }, [currentMonthIncome, currentMonthExpenses, currentMonthBudget]);
 
   // Calculate remaining budget
-  const regularRemaining = budgetSummary.regularBudget - budgetSummary.regularSpent;
+  const regularRemaining = totalCategoryBudget - budgetSummary.regularSpent;
   
-  // Credit card information with accurate spending
-  const creditCards: CreditCard[] = useMemo(() => [
+  // Add credit cards state
+  const [creditCards, setCreditCards] = useState<CreditCard[]>([
     { name: "Capital One", limit: 950, spent: 0, statementDate: 17, dueDate: 11 },
     { name: "Capital Five", limit: 7500, spent: 0, statementDate: 25, dueDate: 19 },
     { name: "Quicksilver One", limit: 300, spent: 0, statementDate: 27, dueDate: 23 },
     { name: "American Express", limit: 300, spent: 0, statementDate: 25, dueDate: 22 }
-  ], []);
+  ]);
 
-  // Calculate credit card spending for the selected month
+  // Calculate credit card spending
   const creditCardSpending = useMemo(() => {
     const spending: { [key: string]: number } = {};
     
-    // Initialize spending for each card to 0
-    creditCards.forEach(card => {
-      spending[card.name] = 0;
-    });
-    
-    // Sum up spending for each card in the selected month
-    currentMonthExpenses.forEach(expense => {
-      // Extract card name from payment method (e.g., "Capital One (Credit)" -> "Capital One")
-      const cardName = expense.paymentMethod.split(' (')[0];
-      if (cardName === "Capital One" || cardName === "Capital Five" || 
-          cardName === "Quicksilver One" || cardName === "American Express") {
-        spending[cardName] = (spending[cardName] || 0) + expense.amount;
+    expenseTransactions.forEach(expense => {
+      // Skip if paymentMethod is undefined or not a credit card
+      if (!expense.paymentMethod || !expense.paymentMethod.includes('Credit')) {
+        return;
+      }
+
+      // Find the matching credit card
+      const card = creditCards.find(card => expense.paymentMethod.startsWith(card.name));
+      if (card) {
+        spending[card.name] = (spending[card.name] || 0) + expense.amount;
       }
     });
-    
+
     return spending;
-  }, [currentMonthExpenses, creditCards]);
+  }, [expenseTransactions, creditCards]);
 
   // Replace the static alerts with a dynamic calculation
   const alerts = useMemo(() => {
@@ -506,256 +536,442 @@ const BudgetDashboard: React.FC = () => {
     setShowBudgetModal(false);
   };
 
-  // Form handlers
-  const handleExpenseSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const [year, month, day] = expenseFormData.date.split('-');
-    const formattedDate = `${month}/${day}/${year}`;
-    
-    const newExpense: Transaction = {
-      id: expenseTransactions.length + 1,
-      date: formattedDate,
-      category: expenseFormData.category,
-      amount: Number(expenseFormData.amount),
-      description: expenseFormData.description,
-      paymentMethod: expenseFormData.paymentMethod,
-      month: `${year}-${month}`
-    };
-    setExpenseTransactions([...expenseTransactions, newExpense]);
-    setExpenseFormData({
-      date: '',
-      category: '',
-      amount: '',
-      description: '',
-      paymentMethod: ''
+  const handleCategoryBudgetUpdate = (category: string, newValue: number) => {
+    setMonthlyBudgets(prev => {
+      const existing = prev.findIndex(b => b.month === selectedMonth);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = {
+          ...updated[existing],
+          categoryBudgets: {
+            ...updated[existing].categoryBudgets,
+            [category]: newValue
+          }
+        };
+        return updated;
+      }
+      return prev;
     });
-    setShowExpenseModal(false);
+    setEditingCategoryId(null);
+    setTempBudgetValue('');
   };
 
-  const handleIncomeSubmit = (e: React.FormEvent) => {
+  // Form handlers
+  const handleExpenseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      const newExpense: Omit<Expense, 'id'> = {
+        date: expenseFormData.date,
+        category: expenseFormData.category,
+        amount: parseFloat(expenseFormData.amount),
+        description: expenseFormData.description,
+        paymentMethod: expenseFormData.paymentMethod || 'Cash' // Default to 'Cash' if not specified
+      };
+
+      await budgetService.addExpense(newExpense);
+      
+      // Refresh expenses
+      const expenses = await budgetService.getExpenses();
+      setExpenseTransactions(expenses.map(expense => ({
+        id: expense.id || '',
+        date: expense.date,
+        category: expense.category,
+        amount: expense.amount,
+        description: expense.description,
+        paymentMethod: expense.paymentMethod || 'Cash', // Ensure paymentMethod is always set
+        month: expense.date.substring(0, 7)
+      })));
+
+      // Update budget summary
+      const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+      setBudgetSummary(prev => ({
+        ...prev,
+        regularSpent: totalSpent,
+        spendingPercentage: (totalSpent / prev.regularBudget) * 100
+      }));
+
+      // Update credit card tracking if payment method is a credit card
+      if (expenseFormData.paymentMethod.includes('Credit')) {
+        const cardName = expenseFormData.paymentMethod.split('(')[0].trim();
+        setCreditCards(prev => prev.map(card => {
+          if (card.name === cardName) {
+            return {
+              ...card,
+              spent: card.spent + parseFloat(expenseFormData.amount)
+            };
+          }
+          return card;
+        }));
+      }
+
+      setShowExpenseModal(false);
+      setExpenseFormData({
+        date: '',
+        category: '',
+        amount: '',
+        description: '',
+        paymentMethod: ''
+      });
+    } catch (error) {
+      console.error('Error adding expense:', error);
+    }
+  };
+
+  const handleIncomeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const [year, month, day] = incomeFormData.date.split('-');
     const formattedDate = `${month}/${day}/${year}`;
     
-    const newIncome: IncomeTransaction = {
-      id: incomeTransactions.length + 1,
-      date: formattedDate,
-      source: incomeFormData.source,
-      description: incomeFormData.description,
-      amount: Number(incomeFormData.amount),
-      month: `${year}-${month}`
-    };
-    setIncomeTransactions([...incomeTransactions, newIncome]);
-    setIncomeFormData({
-      date: '',
-      source: '',
-      description: '',
-      amount: ''
-    });
-    setShowIncomeModal(false);
-  };
+    try {
+      const newIncome: Omit<Income, 'id'> = {
+        date: formattedDate,
+        source: incomeFormData.source,
+        description: incomeFormData.description,
+        amount: parseFloat(incomeFormData.amount)
+      };
 
-  // Function to handle delete confirmation
-  const handleDeleteConfirm = () => {
-    if (deleteConfirmation.id === null) return;
-    
-    if (deleteConfirmation.type === 'expense') {
-      setExpenseTransactions(expenseTransactions.filter(expense => expense.id !== deleteConfirmation.id));
-    } else {
-      setIncomeTransactions(incomeTransactions.filter(income => income.id !== deleteConfirmation.id));
+      const incomeId = await budgetService.addIncome(newIncome);
+      
+      // Update local state with the new income
+      const newIncomeTransaction = {
+        id: incomeId,
+        date: formattedDate,
+        source: incomeFormData.source,
+        description: incomeFormData.description,
+        amount: parseFloat(incomeFormData.amount),
+        month: `${year}-${month.padStart(2, '0')}`
+      };
+
+      setIncomeTransactions(prev => [...prev, newIncomeTransaction]);
+
+      // Update budget summary
+      const totalIncome = incomeTransactions.reduce((sum, item) => sum + item.amount, 0) + parseFloat(incomeFormData.amount);
+      setBudgetSummary(prev => ({
+        ...prev,
+        income: totalIncome,
+        totalIncome
+      }));
+
+      setShowIncomeModal(false);
+      setIncomeFormData({
+        date: '',
+        source: '',
+        description: '',
+        amount: ''
+      });
+    } catch (error) {
+      console.error('Error adding income:', error);
     }
-    
-    setDeleteConfirmation({ show: false, type: 'expense', id: null });
   };
 
-  // Function to handle edit submission
-  const handleExpenseEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingExpense) return;
-
-    const [year, month, day] = expenseFormData.date.split('-');
-    const formattedDate = `${month}/${day}/${year}`;
-    
-    const updatedExpense: Transaction = {
-      ...editingExpense,
-      date: formattedDate,
-      category: expenseFormData.category,
-      amount: Number(expenseFormData.amount),
-      description: expenseFormData.description,
-      paymentMethod: expenseFormData.paymentMethod,
-      month: `${year}-${month}`
-    };
-
-    setExpenseTransactions(expenseTransactions.map(expense => 
-      expense.id === editingExpense.id ? updatedExpense : expense
-    ));
-
-    setEditingExpense(null);
-    setExpenseFormData({
-      date: '',
-      category: '',
-      amount: '',
-      description: '',
-      paymentMethod: ''
-    });
-    setShowExpenseModal(false);
-  };
-
-  const handleIncomeEdit = (e: React.FormEvent) => {
+  const handleIncomeEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingIncome) return;
 
-    const [year, month, day] = incomeFormData.date.split('-');
-    const formattedDate = `${month}/${day}/${year}`;
-    
-    const updatedIncome: IncomeTransaction = {
-      ...editingIncome,
-      date: formattedDate,
-      source: incomeFormData.source,
-      description: incomeFormData.description,
-      amount: Number(incomeFormData.amount),
-      month: `${year}-${month}`
-    };
+    try {
+      const [year, month, day] = incomeFormData.date.split('-');
+      const formattedDate = `${month}/${day}/${year}`;
 
-    setIncomeTransactions(incomeTransactions.map(income => 
-      income.id === editingIncome.id ? updatedIncome : income
-    ));
-
-    setEditingIncome(null);
-    setIncomeFormData({
-      date: '',
-      source: '',
-      description: '',
-      amount: ''
-    });
-    setShowIncomeModal(false);
-  };
-
-  // Function to start editing
-  const startEditing = (type: 'expense' | 'income', item: Transaction | IncomeTransaction) => {
-    if (type === 'expense') {
-      const expense = item as Transaction;
-      const [month, day, year] = expense.date.split('/');
-      setExpenseFormData({
-        date: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
-        category: expense.category,
-        amount: expense.amount.toString(),
-        description: expense.description,
-        paymentMethod: expense.paymentMethod
+      await budgetService.updateIncome(editingIncome.id, {
+        date: formattedDate,
+        source: incomeFormData.source,
+        description: incomeFormData.description,
+        amount: parseFloat(incomeFormData.amount)
       });
-      setEditingExpense(expense);
-      setShowExpenseModal(true);
-    } else {
-      const income = item as IncomeTransaction;
-      const [month, day, year] = income.date.split('/');
+
+      // Refresh income
+      const income = await budgetService.getIncome();
+      setIncomeTransactions(income.map(item => ({
+        id: item.id || '',
+        date: item.date,
+        source: item.source,
+        description: item.description,
+        amount: item.amount,
+        month: item.date.substring(0, 7)
+      })));
+
+      // Update budget summary
+      const totalIncome = income.reduce((sum: number, item) => sum + item.amount, 0);
+      setBudgetSummary(prev => ({
+        ...prev,
+        income: totalIncome,
+        totalIncome
+      }));
+
+      setShowIncomeModal(false);
+      setEditingIncome(null);
       setIncomeFormData({
-        date: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
-        source: income.source,
-        description: income.description,
-        amount: income.amount.toString()
+        date: '',
+        source: '',
+        description: '',
+        amount: ''
       });
-      setEditingIncome(income);
-      setShowIncomeModal(true);
+    } catch (error) {
+      console.error('Error updating income:', error);
     }
   };
 
-  // Update the expense table actions column
-  const renderExpenseActions = (expense: Transaction) => (
-    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-      <div className="flex justify-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <button
-          onClick={() => startEditing('expense', expense)}
-          className="text-blue-400 hover:text-blue-300"
-        >
-          <PencilIcon className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => setDeleteConfirmation({ show: true, type: 'expense', id: expense.id })}
-          className="text-red-400 hover:text-red-300"
-        >
-          <TrashIcon className="h-5 w-5" />
-        </button>
-      </div>
-    </td>
-  );
+  // Function to handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmation.id) return;
 
-  // Update the income table actions column
-  const renderIncomeActions = (income: IncomeTransaction) => (
-    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-      <div className="flex justify-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <button
-          onClick={() => startEditing('income', income)}
-          className="text-blue-400 hover:text-blue-300"
-        >
-          <PencilIcon className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => setDeleteConfirmation({ show: true, type: 'income', id: income.id })}
-          className="text-red-400 hover:text-red-300"
-        >
-          <TrashIcon className="h-5 w-5" />
-        </button>
-      </div>
-    </td>
-  );
+    try {
+      if (deleteConfirmation.type === 'expense') {
+        // Delete the expense from Firestore
+        await budgetService.deleteExpense(deleteConfirmation.id);
+        
+        // Update local state by removing the deleted expense
+        setExpenseTransactions(prev => prev.filter(expense => expense.id !== deleteConfirmation.id));
+        
+        // Update budget summary
+        const remainingExpenses = expenseTransactions.filter(expense => expense.id !== deleteConfirmation.id);
+        const totalSpent = remainingExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+        setBudgetSummary(prev => ({
+          ...prev,
+          regularSpent: totalSpent,
+          spendingPercentage: (totalSpent / prev.regularBudget) * 100
+        }));
 
-  // Helper function to render sort button
-  const renderSortButton = (type: 'expense' | 'income', label: string, key: SortConfig['key']) => {
-    const config = type === 'expense' ? expenseSortConfig : incomeSortConfig;
-    const isActive = config.key === key;
-    
-    return (
-      <button
-        onClick={() => toggleSort(type, key)}
-        className="flex items-center space-x-1 w-full"
-      >
-        <span className={isActive ? 'font-medium' : ''}>{label}</span>
-        {isActive && (
-          config.direction === 'asc' ? (
+        // Update credit card tracking
+        const creditCardExpenses = remainingExpenses.filter(expense => expense.paymentMethod?.includes('Credit'));
+        setCreditCards(prev => prev.map(card => {
+          const cardExpenses = creditCardExpenses.filter(expense => 
+            expense.paymentMethod?.startsWith(card.name)
+          );
+          const totalSpent = cardExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+          return { ...card, spent: totalSpent };
+        }));
+
+        // Reset to first page if we're on a page that no longer exists
+        if (currentPage > Math.ceil((remainingExpenses.length - 1) / transactionsPerPage)) {
+          setCurrentPage(1);
+        }
+      } else {
+        // Delete the income from Firestore
+        await budgetService.deleteIncome(deleteConfirmation.id);
+        
+        // Update local state by removing the deleted income
+        setIncomeTransactions(prev => prev.filter(income => income.id !== deleteConfirmation.id));
+        
+        // Update budget summary
+        const remainingIncome = incomeTransactions.filter(income => income.id !== deleteConfirmation.id);
+        const totalIncome = remainingIncome.reduce((sum, income) => sum + income.amount, 0);
+        setBudgetSummary(prev => ({
+          ...prev,
+          income: totalIncome,
+          totalIncome
+        }));
+      }
+
+      // Close the confirmation modal
+      setDeleteConfirmation({ show: false, type: 'expense', id: null });
+    } catch (error) {
+      console.error('Error deleting item:', error);
+    }
+  };
+
+  // Function to handle edit submission
+  const handleExpenseEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExpense) return;
+
+    try {
+      // Update the expense in Firestore
+      await budgetService.updateExpense(editingExpense.id, {
+        date: expenseFormData.date,
+        category: expenseFormData.category,
+        amount: parseFloat(expenseFormData.amount),
+        description: expenseFormData.description,
+        paymentMethod: expenseFormData.paymentMethod || 'Cash'
+      });
+
+      // Refresh expenses from Firestore
+      const expenses = await budgetService.getExpenses();
+      setExpenseTransactions(expenses.map(expense => ({
+        id: expense.id || '',
+        date: expense.date,
+        category: expense.category,
+        amount: expense.amount,
+        description: expense.description,
+        paymentMethod: expense.paymentMethod || 'Cash',
+        month: expense.date.substring(0, 7)
+      })));
+
+      // Update budget summary
+      const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+      setBudgetSummary(prev => ({
+        ...prev,
+        regularSpent: totalSpent,
+        spendingPercentage: (totalSpent / prev.regularBudget) * 100
+      }));
+
+      // Update credit card tracking
+      const creditCardExpenses = expenses.filter(expense => expense.paymentMethod?.includes('Credit'));
+      setCreditCards(prev => prev.map(card => {
+        const cardExpenses = creditCardExpenses.filter(expense => 
+          expense.paymentMethod?.startsWith(card.name)
+        );
+        const totalSpent = cardExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+        return { ...card, spent: totalSpent };
+      }));
+
+      // Close the modal and reset form
+      setShowExpenseModal(false);
+      setEditingExpense(null);
+      setExpenseFormData({
+        date: '',
+        category: '',
+        amount: '',
+        description: '',
+        paymentMethod: ''
+      });
+    } catch (error) {
+      console.error('Error updating expense:', error);
+    }
+  };
+
+  // Update the date formatting in the Recent Expenses section
+  const formatDate = (dateString: string) => {
+    const [year, month, day] = dateString.split('-');
+    return `${month}/${day}/${year}`;
+  };
+
+  // Update the delete and edit handlers
+  const handleDeleteClick = (id: string, type: 'expense' | 'income') => {
+    console.log('Delete clicked:', { id, type });
+    setDeleteConfirmation({ show: true, type, id });
+  };
+
+  const handleEditClick = (expense: Transaction) => {
+    setEditingExpense(expense);
+    setExpenseFormData({
+      date: expense.date,
+      category: expense.category,
+      amount: expense.amount.toString(),
+      description: expense.description,
+      paymentMethod: expense.paymentMethod
+    });
+    setShowExpenseModal(true);
+  };
+
+  // Chart data
+  const chartData = useMemo(() => {
+    const labels = categories;
+    const spentData = categories.map(category => categorySpending[category] || 0);
+    const budgetData = categories.map(category => currentMonthBudget.categoryBudgets[category] || 0);
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Spent',
+          data: spentData,
+          backgroundColor: 'rgba(239, 68, 68, 0.5)',
+          borderColor: 'rgb(239, 68, 68)',
+          borderWidth: 1
+        },
+        {
+          label: 'Budget',
+          data: budgetData,
+          backgroundColor: 'rgba(34, 197, 94, 0.5)',
+          borderColor: 'rgb(34, 197, 94)',
+          borderWidth: 1
+        }
+      ]
+    };
+  }, [categories, categorySpending, currentMonthBudget.categoryBudgets]);
+
+  const chartOptions: ChartOptions<'bar'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const
+      },
+      title: {
+        display: true,
+        text: 'Category Spending vs Budget'
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: (value) => `$${value}`
+        }
+      }
+    }
+  };
+
+  // Render sort button
+  const renderSortButton = (type: 'expense' | 'income', key: SortConfig['key'], label: string) => (
+    <button
+      onClick={() => toggleSort(type, key)}
+      className="flex items-center space-x-1 text-gray-400 hover:text-gray-200"
+    >
+      <span>{label}</span>
+      {type === 'expense' ? (
+        expenseSortConfig.key === key && (
+          expenseSortConfig.direction === 'asc' ? (
             <ChevronUpIcon className="h-4 w-4" />
           ) : (
             <ChevronDownIcon className="h-4 w-4" />
           )
-        )}
-      </button>
-    );
+        )
+      ) : (
+        incomeSortConfig.key === key && (
+          incomeSortConfig.direction === 'asc' ? (
+            <ChevronUpIcon className="h-4 w-4" />
+          ) : (
+            <ChevronDownIcon className="h-4 w-4" />
+          )
+        )
+      )}
+    </button>
+  );
+
+  // Render income actions
+  const renderIncomeActions = (income: IncomeTransaction) => (
+    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+      <div className="flex items-center justify-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => {
+            setEditingIncome(income);
+            setIncomeFormData({
+              date: income.date.split('/').reverse().join('-'),
+              source: income.source,
+              description: income.description,
+              amount: income.amount.toString()
+            });
+            setShowIncomeModal(true);
+          }}
+          className="text-blue-400 hover:text-blue-300"
+        >
+          <PencilIcon className="h-5 w-5" />
+        </button>
+        <button
+          onClick={() => handleDeleteClick(income.id, 'income')}
+          className="text-red-400 hover:text-red-300"
+        >
+          <TrashIcon className="h-5 w-5" />
+        </button>
+      </div>
+    </td>
+  );
+
+  // Calculate trend
+  const calculateTrend = (current: number, previous: number): number => {
+    if (previous === 0) return 0;
+    return ((current - previous) / previous) * 100;
   };
 
-  // Add state for editing budgets
-  const [isEditingMonthlyBudget, setIsEditingMonthlyBudget] = useState(false);
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [tempBudgetValue, setTempBudgetValue] = useState<string>('');
-
-  // Function to handle monthly budget update
-  const handleMonthlyBudgetUpdate = (newValue: number) => {
-    const newBudget = {
-      ...currentMonthBudget,
-      totalBudget: newValue
-    };
-    handleBudgetUpdate(newBudget);
-    setIsEditingMonthlyBudget(false);
-  };
-
-  // Function to handle category budget update
-  const handleCategoryBudgetUpdate = (category: string, newValue: number) => {
-    const newBudget = {
-      ...currentMonthBudget,
-      categoryBudgets: {
-        ...currentMonthBudget.categoryBudgets,
-        [category]: newValue
-      }
-    };
-    handleBudgetUpdate(newBudget);
-    setEditingCategoryId(null);
-  };
-
-  // Add category icons mapping
+  // Category icons
   const categoryIcons: { [key: string]: string } = {
     'Rent': '🏠',
     'Storage': '📦',
     'Utilities': '⚡',
     'Cell Phone': '📱',
-    'Wellness': '💊',
     'Credit Cards': '💳',
     'Investments': '📈',
     'Transportation': '🚗',
@@ -767,145 +983,58 @@ const BudgetDashboard: React.FC = () => {
     'Wardrobe': '👕',
     'Eating Out': '🍽️',
     'Melany': '👩',
-    'Mom': '👨‍👩‍👧‍👦',
+    'Mom': '👩‍🦰',
     'Other': '📌'
   };
 
-  // Update the chart data configuration
-  const chartData: {
-    labels: string[];
-    datasets: {
-      label: string;
-      data: number[];
-      backgroundColor: string;
-      borderColor: string;
-      borderWidth: number;
-      borderRadius: number;
-    }[];
-  } = {
-    labels: categories,
-    datasets: [
-      {
-        label: 'Budget',
-        data: categories.map(category => currentMonthBudget.categoryBudgets[category] || 0),
-        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-        borderColor: 'rgba(59, 130, 246, 0.8)',
-        borderWidth: 1,
-        borderRadius: 4
-      },
-      {
-        label: 'Actual',
-        data: categories.map(category => categorySpending[category] || 0),
-        backgroundColor: 'rgba(239, 68, 68, 0.5)',
-        borderColor: 'rgba(239, 68, 68, 0.8)',
-        borderWidth: 1,
-        borderRadius: 4
-      }
-    ]
-  };
+  // Render expense actions
+  const renderExpenseActions = (expense: Transaction) => (
+    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+      <div className="flex items-center justify-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => {
+            setEditingExpense(expense);
+            setExpenseFormData({
+              date: expense.date.split('/').reverse().join('-'),
+              category: expense.category,
+              description: expense.description,
+              amount: expense.amount.toString(),
+              paymentMethod: expense.paymentMethod
+            });
+            setShowExpenseModal(true);
+          }}
+          className="text-blue-400 hover:text-blue-300"
+        >
+          <PencilIcon className="h-5 w-5" />
+        </button>
+        <button
+          onClick={() => {
+            console.log('Delete button clicked for expense:', expense.id);
+            handleDeleteClick(expense.id, 'expense');
+          }}
+          className="text-red-400 hover:text-red-300"
+        >
+          <TrashIcon className="h-5 w-5" />
+        </button>
+      </div>
+    </td>
+  );
 
-  // Update the chart options to ensure proper display
-  const chartOptions: ChartOptions<'bar'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: 'Amount ($)',
-          color: '#9CA3AF',
-          font: {
-            size: 12
-          }
-        },
-        grid: {
-          color: 'rgba(255, 255, 255, 0.1)'
-        },
-        ticks: {
-          color: '#9CA3AF',
-          callback: function(this: Scale<CoreScaleOptions>, tickValue: number | string) {
-            return `$${Number(tickValue).toLocaleString()}`;
-          }
-        }
-      },
-      x: {
-        ticks: {
-          autoSkip: false,
-          maxRotation: 45,
-          minRotation: 45,
-          color: '#9CA3AF',
-          font: {
-            size: 11
-          }
-        },
-        grid: {
-          color: 'rgba(255, 255, 255, 0.1)'
-        }
-      }
-    },
-    plugins: {
-      legend: {
-        position: 'top',
-        labels: {
-          color: '#9CA3AF',
-          padding: 20,
-          usePointStyle: true,
-          pointStyle: 'circle',
-          font: {
-            size: 12
-          }
-        }
-      },
-      title: {
-        display: true,
-        text: `Category Spending for ${formatMonthDisplay(selectedMonth)}`,
-        color: '#E5E7EB',
-        font: {
-          size: 16
-        }
-      },
-      tooltip: {
-        backgroundColor: 'rgba(17, 24, 39, 0.8)',
-        titleColor: '#E5E7EB',
-        bodyColor: '#E5E7EB',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        borderWidth: 1,
-        padding: 12,
-        usePointStyle: true,
-        callbacks: {
-          label: (context: any) => {
-            const label = context.dataset.label || '';
-            const value = context.parsed.y;
-            const category = context.label;
-            const budget = currentMonthBudget.categoryBudgets[category] || 0;
-            const percentage = budget > 0 ? ((value / budget) * 100).toFixed(1) : '0';
-            return `${label}: $${value.toLocaleString()} (${percentage}% of budget)`;
-          }
-        }
-      }
-    }
-  };
-
-  // Add pagination controls component
+  // Pagination controls component
   const PaginationControls = () => (
     <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-t border-gray-700 sm:px-6">
       <div className="flex justify-between flex-1 sm:hidden">
         <button
           onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
           disabled={currentPage === 1}
-          className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-300 bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50"
         >
           Previous
         </button>
         <button
           onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
           disabled={currentPage === totalPages}
-          className="relative ml-3 inline-flex items-center px-4 py-2 text-sm font-medium text-gray-300 bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50"
         >
           Next
         </button>
@@ -913,11 +1042,11 @@ const BudgetDashboard: React.FC = () => {
       <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-gray-300">
-            Showing <span className="font-medium">{((currentPage - 1) * transactionsPerPage) + 1}</span> to{' '}
+            Showing <span className="font-medium">{(currentPage - 1) * transactionsPerPage + 1}</span> to{' '}
             <span className="font-medium">
               {Math.min(currentPage * transactionsPerPage, filteredAndSortedExpenses.length)}
-            </span> of{' '}
-            <span className="font-medium">{filteredAndSortedExpenses.length}</span> results
+            </span>{' '}
+            of <span className="font-medium">{filteredAndSortedExpenses.length}</span> results
           </p>
         </div>
         <div>
@@ -925,28 +1054,15 @@ const BudgetDashboard: React.FC = () => {
             <button
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
-              className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-700 bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-700 bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-50"
             >
               <span className="sr-only">Previous</span>
               <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
             </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                  currentPage === page
-                    ? 'z-10 bg-blue-500 border-blue-500 text-blue-200'
-                    : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
-                }`}
-              >
-                {page}
-              </button>
-            ))}
             <button
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
               disabled={currentPage === totalPages}
-              className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-700 bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-700 bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-50"
             >
               <span className="sr-only">Next</span>
               <ChevronRightIcon className="h-5 w-5" aria-hidden="true" />
@@ -957,73 +1073,87 @@ const BudgetDashboard: React.FC = () => {
     </div>
   );
 
-  // Add this function to calculate trend
-  const calculateTrend = (category: string) => {
-    const currentMonthSpent = categorySpending[category] || 0;
-    const previousMonth = new Date(selectedMonth);
-    previousMonth.setMonth(previousMonth.getMonth() - 1);
-    const previousMonthStr = previousMonth.toISOString().slice(0, 7);
-    const previousMonthExpenses = expenseTransactions.filter(expense => 
-      expense.month === previousMonthStr && expense.category === category
+  const BudgetSummary = () => {
+    const totalSpent = budgetSummary.regularSpent + budgetSummary.creditSpent;
+    const totalBudget = Object.values(currentMonthBudget.categoryBudgets).reduce((sum, budget) => sum + budget, 0);
+    const remaining = totalBudget - totalSpent;
+    const totalIncome = budgetSummary.income;
+    const totalAvailable = totalBudget - totalSpent;
+    const spendingPercentage = (totalSpent / totalBudget) * 100;
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Budget Card */}
+        <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-200">Budget</h3>
+            <div className="text-gray-400">
+              <span className="text-sm">Regular: ${totalBudget.toLocaleString()}</span>
+              <br />
+              <span className="text-sm">Credit: ${budgetSummary.creditBudget.toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="text-3xl font-bold text-blue-400">
+            ${totalBudget.toLocaleString()}
+          </div>
+        </div>
+
+        {/* Remaining Card */}
+        <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-200">Remaining</h3>
+            <div className="text-gray-400">
+              <span className="text-sm">Regular: ${remaining.toLocaleString()}</span>
+              <br />
+              <span className="text-sm">Credit: ${budgetSummary.creditBudget.toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="text-3xl font-bold text-green-400">
+            ${totalAvailable.toLocaleString()}
+          </div>
+        </div>
+
+        {/* Income Card */}
+        <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-200">Income</h3>
+            <div className="text-gray-400">
+              <span className="text-sm">Regular: ${totalIncome.toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="text-3xl font-bold text-green-400">
+            ${totalIncome.toLocaleString()}
+          </div>
+        </div>
+
+        {/* Spending Card */}
+        <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-200">Spending</h3>
+            <div className="text-gray-400">
+              <span className="text-sm">Regular: ${budgetSummary.regularSpent.toLocaleString()}</span>
+              <br />
+              <span className="text-sm">Credit: ${budgetSummary.creditSpent.toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="text-3xl font-bold text-red-400">
+            ${totalSpent.toLocaleString()}
+          </div>
+          <div className="mt-2">
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div 
+                className="bg-red-500 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(spendingPercentage, 100)}%` }}
+              ></div>
+            </div>
+            <div className="text-sm text-gray-400 mt-1">
+              {spendingPercentage.toFixed(1)}% of budget spent
+            </div>
+          </div>
+        </div>
+      </div>
     );
-    const previousMonthSpent = previousMonthExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-    
-    if (previousMonthSpent === 0) return 0;
-    return ((currentMonthSpent - previousMonthSpent) / previousMonthSpent) * 100;
   };
-
-  // Add these new chart configurations after the existing chartOptions
-  const trendChartOptions: ChartOptions<'line'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        display: false
-      },
-      x: {
-        display: false
-      }
-    },
-    plugins: {
-      legend: {
-        display: false
-      },
-      tooltip: {
-        enabled: true,
-        callbacks: {
-          label: (context) => {
-            return `${context.dataset.label}: $${context.parsed.y.toLocaleString()}`;
-          }
-        }
-      }
-    }
-  };
-
-  // Add trend chart data calculation
-  const trendChartData = useMemo(() => {
-    const last6Months = months.slice(-6);
-    return {
-      labels: last6Months.map(month => formatMonthDisplay(month).split(' ')[0]),
-      datasets: [
-        {
-          label: 'Total Spending',
-          data: last6Months.map(month => {
-            const expenses = expenseTransactions.filter(e => e.month === month);
-            return expenses.reduce((sum, e) => sum + e.amount, 0);
-          }),
-          borderColor: 'rgba(239, 68, 68, 0.8)',
-          backgroundColor: 'rgba(239, 68, 68, 0.2)',
-          tension: 0.4,
-          fill: true
-        }
-      ]
-    };
-  }, [months, expenseTransactions]);
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -1136,7 +1266,7 @@ const BudgetDashboard: React.FC = () => {
             </div>
             
             {/* Main Chart */}
-            <div className="h-96">
+            <div className="w-full h-[400px]">
               <Bar 
                 data={chartData} 
                 options={chartOptions}
@@ -1271,16 +1401,16 @@ const BudgetDashboard: React.FC = () => {
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                    {renderSortButton('income', 'Date', 'date')}
+                    {renderSortButton('income', 'date', 'Date')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                    {renderSortButton('income', 'Source', 'source')}
+                    {renderSortButton('income', 'source', 'Source')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                    {renderSortButton('income', 'Description', 'description')}
+                    {renderSortButton('income', 'description', 'Description')}
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">
-                    {renderSortButton('income', 'Amount', 'amount')}
+                    {renderSortButton('income', 'amount', 'Amount')}
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase">Actions</th>
                 </tr>
@@ -1308,7 +1438,7 @@ const BudgetDashboard: React.FC = () => {
             const percentage = budget > 0 ? (spent / budget) * 100 : 0;
             const remaining = budget - spent;
             const isEditing = editingCategoryId === category;
-            const trend = calculateTrend(category);
+            const trend = calculateTrend(spent, budget);
             
             const getStatusColor = (percentage: number) => {
               if (percentage > 100) return 'bg-red-600';
@@ -1483,19 +1613,19 @@ const BudgetDashboard: React.FC = () => {
                   <thead className="bg-gray-700">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('expense', 'Date', 'date')}
+                        {renderSortButton('expense', 'date', 'Date')}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('expense', 'Category', 'category')}
+                        {renderSortButton('expense', 'category', 'Category')}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('expense', 'Description', 'description')}
+                        {renderSortButton('expense', 'description', 'Description')}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('expense', 'Payment Method', 'paymentMethod')}
+                        {renderSortButton('expense', 'paymentMethod', 'Payment Method')}
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">
-                        {renderSortButton('expense', 'Amount', 'amount')}
+                        {renderSortButton('expense', 'amount', 'Amount')}
                       </th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase">Actions</th>
                     </tr>
@@ -1503,7 +1633,9 @@ const BudgetDashboard: React.FC = () => {
                   <tbody className="bg-gray-800 divide-y divide-gray-700">
                     {paginatedExpenses.map(expense => (
                       <tr key={expense.id} className="group hover:bg-gray-700">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{expense.date}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {formatDate(expense.date)}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{expense.category}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{expense.description}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{expense.paymentMethod}</td>
@@ -1654,6 +1786,7 @@ const BudgetDashboard: React.FC = () => {
                   <option value="American Express (Credit)">American Express</option>
                   <option value="360 (Debit)">360</option>
                   <option value="PayPal (Check)">PayPal</option>
+                  <option value="Cash">Cash</option>
                   <option value="Other">Other</option>
                 </select>
               </div>
@@ -1772,15 +1905,15 @@ const BudgetDashboard: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {deleteConfirmation.show && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-sm border border-gray-700">
-            <h3 className="text-lg font-medium mb-4">Confirm Delete</h3>
-            <p className="text-gray-600 mb-6">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700">
+            <h3 className="text-lg font-medium text-gray-200 mb-4">Confirm Delete</h3>
+            <p className="text-sm text-gray-300 mb-4">
               Are you sure you want to delete this {deleteConfirmation.type}? This action cannot be undone.
             </p>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setDeleteConfirmation({ show: false, type: 'expense', id: null })}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                className="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600"
               >
                 Cancel
               </button>
