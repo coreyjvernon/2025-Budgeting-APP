@@ -56,5 +56,9 @@ steps:
       SAUCE_USERNAME: $(SAUCE_USERNAME)
       SAUCE_ACCESS_KEY: $(SAUCE_ACCESS_KEY)
       SAUCE_TUNNEL_NAME: $(SAUCE_TUNNEL_NAME)
-      BASE_URL: "$[eq(parameters.environment, 'dev') ? variables['BASE_URL_DEV'] : variables['BASE_URL_PROD']]"
+      # Set BASE_URL depending on environment parameter
+      ${{ if eq(parameters.environment, 'dev') }}:
+        BASE_URL: $(BASE_URL_DEV)
+      ${{ if ne(parameters.environment, 'dev') }}:
+        BASE_URL: $(BASE_URL_PROD)
       BUILD_ID: $(Build.BuildId)
