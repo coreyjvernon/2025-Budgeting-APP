@@ -17,9 +17,9 @@ pool:
 variables:
   - group: sauce-credentials
   - name: SAUCE_USERNAME
-    value: $(sauceUsername)
+    value: $(SAUCE_USERNAME)
   - name: SAUCE_ACCESS_KEY
-    value: $(sauceAccessKey)
+    value: $(SAUCE_ACCESS_KEY)
   - name: SAUCE_TUNNEL_NAME
     value: 'budget-app-tunnel'
   - name: BASE_URL_DEV
