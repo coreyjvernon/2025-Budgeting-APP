@@ -15,7 +15,7 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  - group: sauce-credentials
+  - group: 'SL creds'
   - name: SAUCE_USERNAME
     value: $(SAUCE_USERNAME)
   - name: SAUCE_ACCESS_KEY
