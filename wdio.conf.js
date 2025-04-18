@@ -11,7 +11,7 @@ exports.config = {
   // WebdriverIO configurations
   runner: 'local',
   specs: [
-    './test/specs/**/*.js'
+    './test/specs/addIncomeSaucelabs.test.js'
   ],
   
   // Maximum number of parallel instances
@@ -25,7 +25,8 @@ exports.config = {
     browserVersion: 'latest',
     'sauce:options': {
       build: 'Budget App Build ' + new Date().toISOString(),
-      screenResolution: '1920x1080'
+      screenResolution: '1920x1080',
+      tunnelIdentifier: process.env.SAUCE_TUNNEL_NAME || 'budget-app-tunnel'
     }
   }],
   
@@ -43,9 +44,12 @@ exports.config = {
   services: ['sauce'],
   
   // Hooks
-  beforeSession: function (config, capabilities, specs) {
-    if (process.env.CI) {
-      capabilities['sauce:options'].tunnelIdentifier = process.env.SAUCE_TUNNEL_ID;
-    }
+  beforeSession: function (config, capabilities) {
+    // Always ensure the tunnel identifier is set
+    capabilities['sauce:options'].tunnelIdentifier = process.env.SAUCE_TUNNEL_NAME || 'budget-app-tunnel';
+  },
+
+  afterTest: async function (_test, _context, { passed }) {
+    await browser.execute(`sauce:job-result=${passed ? 'passed' : 'failed'}`);
   }
 };

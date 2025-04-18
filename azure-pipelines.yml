@@ -1,6 +1,16 @@
 trigger:
   - main
 
+# Allow running tests against either the production site or localhost via Sauce Connect
+parameters:
+  - name: environment
+    displayName: Environment to test against
+    type: string
+    default: 'prod'
+    values:
+      - prod   # tests hit https://cjv-budgetapp.web.app/
+      - dev    # tests hit http://localhost:3000 via Sauce Connect tunnel
+
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -10,6 +20,10 @@ variables:
     value: $(sauceUsername)
   - name: SAUCE_ACCESS_KEY
     value: $(sauceAccessKey)
+  # Tunnel name hard‑coded in wdio.conf.js but can be overridden
+  SAUCE_TUNNEL_NAME: 'budget-app-tunnel'
+  BASE_URL_DEV: 'http://localhost:3000'
+  BASE_URL_PROD: 'https://cjv-budgetapp.web.app/'
 
 steps:
   - task: NodeTool@0
@@ -21,21 +35,28 @@ steps:
       npm install
     displayName: 'Install dependencies'
 
+  # Start Sauce Connect and expose the tunnel only for the `dev` environment
   - script: |
       npm install -g sauce-connect-launcher
-      sc -u $(SAUCE_USERNAME) -k $(SAUCE_ACCESS_KEY) &
-      sleep 10
+      sc -u $(SAUCE_USERNAME) -k $(SAUCE_ACCESS_KEY) --tunnel-name $(SAUCE_TUNNEL_NAME) &
+      sleep 15
     displayName: 'Start Sauce Connect Tunnel'
+    condition: eq('${{ parameters.environment }}', 'dev')
 
+  # Launch the local dev server only when testing against localhost
   - script: |
       npm start &
       sleep 10
     displayName: 'Start application'
+    condition: eq('${{ parameters.environment }}', 'dev')
 
+  # Run the WDIO tests. BASE_URL and tunnel env vars change per environment.
   - script: |
-      npm test
-    displayName: 'Run tests on Sauce Labs'
+      npx wdio run wdio.conf.js
+    displayName: 'Run WDIO tests on Sauce Labs'
     env:
       SAUCE_USERNAME: $(SAUCE_USERNAME)
       SAUCE_ACCESS_KEY: $(SAUCE_ACCESS_KEY)
+      SAUCE_TUNNEL_NAME: $(SAUCE_TUNNEL_NAME)
+      BASE_URL: $[eq(parameters.environment, 'dev') ? variables['BASE_URL_DEV'] : variables['BASE_URL_PROD']]
       BUILD_ID: $(Build.BuildId)
