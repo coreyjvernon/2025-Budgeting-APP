@@ -1,0 +1,9 @@
+version: '3'
+services:
+  budget-app-tests:
+    build: .
+    environment:
+      - SAUCE_USERNAME=${SAUCE_USERNAME}
+      - SAUCE_ACCESS_KEY=${SAUCE_ACCESS_KEY}
+    volumes:
+      - ./test-results:/app/test-results

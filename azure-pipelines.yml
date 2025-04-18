@@ -1,0 +1,41 @@
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: sauce-credentials
+  - name: SAUCE_USERNAME
+    value: $(sauceUsername)
+  - name: SAUCE_ACCESS_KEY
+    value: $(sauceAccessKey)
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '16.x'
+    displayName: 'Install Node.js'
+
+  - script: |
+      npm install
+    displayName: 'Install dependencies'
+
+  - script: |
+      npm install -g sauce-connect-launcher
+      sc -u $(SAUCE_USERNAME) -k $(SAUCE_ACCESS_KEY) &
+      sleep 10
+    displayName: 'Start Sauce Connect Tunnel'
+
+  - script: |
+      npm start &
+      sleep 10
+    displayName: 'Start application'
+
+  - script: |
+      npm test
+    displayName: 'Run tests on Sauce Labs'
+    env:
+      SAUCE_USERNAME: $(SAUCE_USERNAME)
+      SAUCE_ACCESS_KEY: $(SAUCE_ACCESS_KEY)
+      BUILD_ID: $(Build.BuildId)

@@ -1,0 +1,8 @@
+---
+# Sauce Connect configuration
+tunnel-identifier: budget-app-tunnel
+fast-fail-regexps: localhost
+tunnel-domains: localhost
+direct-domains: localhost
+logfile: ./sauce-connect.log
+no-ssl-bump-domains: localhost
