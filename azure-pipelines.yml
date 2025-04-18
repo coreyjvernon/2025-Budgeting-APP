@@ -20,10 +20,12 @@ variables:
     value: $(sauceUsername)
   - name: SAUCE_ACCESS_KEY
     value: $(sauceAccessKey)
-  # Tunnel name hard‑coded in wdio.conf.js but can be overridden
-  SAUCE_TUNNEL_NAME: 'budget-app-tunnel'
-  BASE_URL_DEV: 'http://localhost:3000'
-  BASE_URL_PROD: 'https://cjv-budgetapp.web.app/'
+  - name: SAUCE_TUNNEL_NAME
+    value: 'budget-app-tunnel'
+  - name: BASE_URL_DEV
+    value: 'http://localhost:3000'
+  - name: BASE_URL_PROD
+    value: 'https://cjv-budgetapp.web.app/'
 
 steps:
   - task: NodeTool@0
