@@ -60,5 +60,5 @@ steps:
       SAUCE_USERNAME: $(SAUCE_USERNAME)
       SAUCE_ACCESS_KEY: $(SAUCE_ACCESS_KEY)
       SAUCE_TUNNEL_NAME: $(SAUCE_TUNNEL_NAME)
-      BASE_URL: $[eq(parameters.environment, 'dev') ? variables['BASE_URL_DEV'] : variables['BASE_URL_PROD']]
+      BASE_URL: "$[eq(parameters.environment, 'dev') ? variables['BASE_URL_DEV'] : variables['BASE_URL_PROD']]"
       BUILD_ID: $(Build.BuildId)
