@@ -808,8 +808,14 @@ const BudgetDashboard: React.FC = () => {
 
   const handleEditClick = (expense: Transaction) => {
     setEditingExpense(expense);
+    // Handle both MM/DD/YYYY and YYYY-MM-DD date formats
+    let formattedDate = expense.date;
+    if (expense.date.includes('/')) {
+      const [month, day, year] = expense.date.split('/');
+      formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
     setExpenseFormData({
-      date: expense.date,
+      date: formattedDate,
       category: expense.category,
       amount: expense.amount.toString(),
       description: expense.description,
@@ -958,9 +964,14 @@ const BudgetDashboard: React.FC = () => {
         <button
           onClick={() => {
             setEditingExpense(expense);
-            const [month, day, year] = expense.date.split('/');
+            // Handle both MM/DD/YYYY and YYYY-MM-DD date formats
+            let formattedDate = expense.date;
+            if (expense.date.includes('/')) {
+              const [month, day, year] = expense.date.split('/');
+              formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
             setExpenseFormData({
-              date: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+              date: formattedDate,
               category: expense.category,
               description: expense.description,
               amount: expense.amount.toString(),
