@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { TrashIcon, PencilIcon, ChevronUpIcon, ChevronDownIcon, FunnelIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import {
   Chart as ChartJS,
@@ -109,6 +109,7 @@ interface MonthlyBudget {
   };
 }
 
+
 const BudgetDashboard: React.FC = () => {
   // State for modals
   const [showExpenseModal, setShowExpenseModal] = useState<boolean>(false);
@@ -158,36 +159,27 @@ const BudgetDashboard: React.FC = () => {
 
         // Load income
         const income = await budgetService.getIncome();
-        const formattedIncome = income.map(item => ({
-          id: item.id || '',
-          date: item.date,
-          source: item.source,
-          description: item.description,
-          amount: item.amount,
-          month: item.date.substring(0, 7)
-        }));
+        const formattedIncome = income.map(item => {
+          // Parse MM/DD/YYYY format to YYYY-MM format
+          const [month, day, year] = item.date.split('/');
+          return {
+            id: item.id || '',
+            date: item.date,
+            source: item.source,
+            description: item.description,
+            amount: item.amount,
+            month: `${year}-${month.padStart(2, '0')}`
+          };
+        });
         setIncomeTransactions(formattedIncome);
 
-        // Initialize credit card spent amounts
-        const creditCardExpenses = expenses.filter(expense => expense.paymentMethod?.includes('Credit'));
-        setCreditCards(prev => prev.map(card => {
-          const cardExpenses = creditCardExpenses.filter(expense => 
-            expense.paymentMethod?.startsWith(card.name)
-          );
-          const totalSpent = cardExpenses.reduce((sum: number, expense) => sum + expense.amount, 0);
-          return { ...card, spent: totalSpent };
-        }));
+        // Initialize credit card spent amounts (reset to 0 since spending is calculated per month)
+        setCreditCards(prev => prev.map(card => ({
+          ...card,
+          spent: 0
+        })));
 
-        // Update budget summary
-        const totalSpent = expenses.reduce((sum: number, expense) => sum + expense.amount, 0);
-        const totalIncome = income.reduce((sum: number, item) => sum + item.amount, 0);
-        setBudgetSummary(prev => ({
-          ...prev,
-          regularSpent: totalSpent,
-          spendingPercentage: (totalSpent / prev.regularBudget) * 100,
-          income: totalIncome,
-          totalIncome
-        }));
+        // Note: Budget summary will be calculated by useEffect based on current month data
       } catch (error) {
         console.error('Error loading data:', error);
       }
@@ -227,7 +219,12 @@ const BudgetDashboard: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
 
   // Add month selection state
-  const [selectedMonth, setSelectedMonth] = useState<string>('2025-03');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    return `${year}-${month}`;
+  });
 
   // Add pagination state after other state declarations
   const [currentPage, setCurrentPage] = useState(1);
@@ -340,30 +337,9 @@ const BudgetDashboard: React.FC = () => {
 
   const totalPages = Math.ceil(filteredAndSortedExpenses.length / transactionsPerPage);
 
-  // Sort income
-  const sortedIncome = useMemo(() => {
-    const sorted = [...currentMonthIncome];
-    sorted.sort((a, b) => {
-      const direction = incomeSortConfig.direction === 'asc' ? 1 : -1;
-      
-      switch (incomeSortConfig.key) {
-        case 'date':
-          return direction * (new Date(a.date).getTime() - new Date(b.date).getTime());
-        case 'source':
-          return direction * a.source.localeCompare(b.source);
-        case 'description':
-          return direction * a.description.localeCompare(b.description);
-        case 'amount':
-          return direction * (a.amount - b.amount);
-        default:
-          return 0;
-      }
-    });
-    return sorted;
-  }, [currentMonthIncome, incomeSortConfig]);
 
-  // Toggle sort direction and key
-  const toggleSort = (type: 'expense' | 'income', key: SortConfig['key']) => {
+  // Toggle sort direction and key - optimized with useCallback
+  const toggleSort = useCallback((type: 'expense' | 'income', key: SortConfig['key']) => {
     if (type === 'expense') {
       setExpenseSortConfig(prev => ({
         key,
@@ -375,12 +351,12 @@ const BudgetDashboard: React.FC = () => {
         direction: prev.key === key ? (prev.direction === 'asc' ? 'desc' : 'asc') : 'desc'
       }));
     }
-  };
+  }, []);
 
-  // Reset filters
-  const resetFilters = () => {
+  // Reset filters - optimized with useCallback
+  const resetFilters = useCallback(() => {
     setExpenseFilters({ category: '', paymentMethod: '' });
-  };
+  }, []);
 
   // Add state for monthly budgets
   const [monthlyBudgets, setMonthlyBudgets] = useState<MonthlyBudget[]>([
@@ -412,12 +388,52 @@ const BudgetDashboard: React.FC = () => {
 
   const [showBudgetModal, setShowBudgetModal] = useState(false);
 
-  // Get current month's budget
+  // Get current month's budget (carry forward from previous months if not set)
   const currentMonthBudget = useMemo(() => {
-    return monthlyBudgets.find(budget => budget.month === selectedMonth) || {
+    // First, check if there's a budget specifically for this month
+    const exactBudget = monthlyBudgets.find(budget => budget.month === selectedMonth);
+    if (exactBudget) {
+      return exactBudget;
+    }
+
+    // If no exact budget, find the most recent budget before this month
+    const sortedBudgets = monthlyBudgets
+      .filter(budget => budget.month <= selectedMonth)
+      .sort((a, b) => b.month.localeCompare(a.month)); // Sort descending (most recent first)
+    
+    if (sortedBudgets.length > 0) {
+      // Carry forward the most recent budget to the current month
+      return {
+        month: selectedMonth,
+        totalBudget: sortedBudgets[0].totalBudget,
+        categoryBudgets: { ...sortedBudgets[0].categoryBudgets }
+      };
+    }
+
+    // Default budget if no previous budgets exist
+    return {
       month: selectedMonth,
       totalBudget: 9401.00,
-      categoryBudgets: {}
+      categoryBudgets: {
+        'Rent': 2500,
+        'Storage': 300,
+        'Utilities': 200,
+        'Cell Phone': 100,
+        'Wellness': 200,
+        'Credit Cards': 500,
+        'Investments': 1000,
+        'Transportation': 400,
+        'Groceries': 800,
+        'Entertainment': 300,
+        'Subscriptions': 100,
+        'Savings': 1000,
+        'Business': 500,
+        'Wardrobe': 300,
+        'Eating Out': 400,
+        'Melany': 300,
+        'Mom': 800,
+        'Other': 200
+      }
     };
   }, [monthlyBudgets, selectedMonth]);
 
@@ -446,6 +462,8 @@ const BudgetDashboard: React.FC = () => {
 
     setBudgetSummary(prev => ({
       ...prev,
+      income: totalIncome,
+      totalIncome: totalIncome,
       regularSpent: totalSpent,
       spendingPercentage: spendingPercentage
     }));
@@ -462,11 +480,14 @@ const BudgetDashboard: React.FC = () => {
     { name: "American Express", limit: 300, spent: 0, statementDate: 25, dueDate: 22 }
   ]);
 
-  // Calculate credit card spending
+  // Calculate credit card spending for current month only
   const creditCardSpending = useMemo(() => {
     const spending: { [key: string]: number } = {};
     
-    expenseTransactions.forEach(expense => {
+    // Only include expenses from the current selected month
+    const currentMonthExpenses = expenseTransactions.filter(expense => expense.month === selectedMonth);
+    
+    currentMonthExpenses.forEach(expense => {
       // Skip if paymentMethod is undefined or not a credit card
       if (!expense.paymentMethod || !expense.paymentMethod.includes('Credit')) {
         return;
@@ -480,7 +501,7 @@ const BudgetDashboard: React.FC = () => {
     });
 
     return spending;
-  }, [expenseTransactions, creditCards]);
+  }, [expenseTransactions, creditCards, selectedMonth]);
 
   // Replace the static alerts with a dynamic calculation
   const alerts = useMemo(() => {
@@ -542,6 +563,7 @@ const BudgetDashboard: React.FC = () => {
     setMonthlyBudgets(prev => {
       const existing = prev.findIndex(b => b.month === selectedMonth);
       if (existing >= 0) {
+        // Update existing budget for this month
         const updated = [...prev];
         updated[existing] = {
           ...updated[existing],
@@ -551,15 +573,25 @@ const BudgetDashboard: React.FC = () => {
           }
         };
         return updated;
+      } else {
+        // Create new budget for this month based on current budget (carried forward)
+        const newBudget: MonthlyBudget = {
+          month: selectedMonth,
+          totalBudget: currentMonthBudget.totalBudget,
+          categoryBudgets: {
+            ...currentMonthBudget.categoryBudgets,
+            [category]: newValue
+          }
+        };
+        return [...prev, newBudget];
       }
-      return prev;
     });
     setEditingCategoryId(null);
     setTempBudgetValue('');
   };
 
-  // Form handlers
-  const handleExpenseSubmit = async (e: React.FormEvent) => {
+  // Form handlers - optimized with useCallback
+  const handleExpenseSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const newExpense = {
@@ -604,9 +636,9 @@ const BudgetDashboard: React.FC = () => {
       console.error('Error adding expense:', error);
       alert('Failed to add expense. Please try again.');
     }
-  };
+  }, [expenseFormData, setExpenseTransactions, setShowExpenseModal]);
 
-  const handleIncomeSubmit = async (e: React.FormEvent) => {
+  const handleIncomeSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const [year, month, day] = incomeFormData.date.split('-');
     const formattedDate = `${month}/${day}/${year}`;
@@ -633,14 +665,6 @@ const BudgetDashboard: React.FC = () => {
 
       setIncomeTransactions(prev => [...prev, newIncomeTransaction]);
 
-      // Update budget summary
-      const totalIncome = incomeTransactions.reduce((sum, item) => sum + item.amount, 0) + parseFloat(incomeFormData.amount);
-      setBudgetSummary(prev => ({
-        ...prev,
-        income: totalIncome,
-        totalIncome
-      }));
-
       setShowIncomeModal(false);
       setIncomeFormData({
         date: '',
@@ -651,7 +675,7 @@ const BudgetDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error adding income:', error);
     }
-  };
+  }, [incomeFormData, setIncomeTransactions, setShowIncomeModal, setIncomeFormData]);
 
   const handleIncomeEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -670,21 +694,17 @@ const BudgetDashboard: React.FC = () => {
 
       // Refresh income
       const income = await budgetService.getIncome();
-      setIncomeTransactions(income.map(item => ({
-        id: item.id || '',
-        date: item.date,
-        source: item.source,
-        description: item.description,
-        amount: item.amount,
-        month: item.date.substring(0, 7)
-      })));
-
-      // Update budget summary
-      const totalIncome = income.reduce((sum: number, item) => sum + item.amount, 0);
-      setBudgetSummary(prev => ({
-        ...prev,
-        income: totalIncome,
-        totalIncome
+      setIncomeTransactions(income.map(item => {
+        // Parse MM/DD/YYYY format to YYYY-MM format
+        const [month, day, year] = item.date.split('/');
+        return {
+          id: item.id || '',
+          date: item.date,
+          source: item.source,
+          description: item.description,
+          amount: item.amount,
+          month: `${year}-${month.padStart(2, '0')}`
+        };
       }));
 
       setShowIncomeModal(false);
@@ -752,15 +772,8 @@ const BudgetDashboard: React.FC = () => {
         spendingPercentage: (totalSpent / prev.regularBudget) * 100
       }));
 
-      // Update credit card tracking
-      const creditCardExpenses = expenses.filter(expense => expense.paymentMethod?.includes('Credit'));
-      setCreditCards(prev => prev.map(card => {
-        const cardExpenses = creditCardExpenses.filter(expense => 
-          expense.paymentMethod?.startsWith(card.name)
-        );
-        const totalSpent = cardExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-        return { ...card, spent: totalSpent };
-      }));
+      // Credit card tracking is now handled by the creditCardSpending useMemo
+      // which automatically filters by selected month, so no manual update needed
 
       // Close the modal and reset form
       setShowExpenseModal(false);
@@ -787,11 +800,11 @@ const BudgetDashboard: React.FC = () => {
     });
   };
 
-  // Update the delete and edit handlers
-  const handleDeleteClick = (id: string, type: 'expense' | 'income') => {
+  // Update the delete and edit handlers - optimized with useCallback
+  const handleDeleteClick = useCallback((id: string, type: 'expense' | 'income') => {
     console.log('Delete clicked:', { id, type });
     setDeleteConfirmation({ show: true, type, id });
-  };
+  }, []);
 
   const handleEditClick = (expense: Transaction) => {
     setEditingExpense(expense);
@@ -854,8 +867,8 @@ const BudgetDashboard: React.FC = () => {
     }
   };
 
-  // Render sort button
-  const renderSortButton = (type: 'expense' | 'income', key: SortConfig['key'], label: string) => (
+  // Render sort button - optimized with useCallback
+  const renderSortButton = useCallback((type: 'expense' | 'income', key: SortConfig['key'], label: string) => (
     <button
       onClick={() => toggleSort(type, key)}
       className="flex items-center space-x-1 text-gray-400 hover:text-gray-200"
@@ -879,17 +892,18 @@ const BudgetDashboard: React.FC = () => {
         )
       )}
     </button>
-  );
+  ), [toggleSort, expenseSortConfig, incomeSortConfig]);
 
-  // Render income actions
-  const renderIncomeActions = (income: IncomeTransaction) => (
-    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+  // Render income actions - optimized with useCallback
+  const renderIncomeActions = useCallback((income: IncomeTransaction) => (
+    <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-center">
       <div className="flex items-center justify-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onClick={() => {
             setEditingIncome(income);
+            const [month, day, year] = income.date.split('/');
             setIncomeFormData({
-              date: income.date.split('/').reverse().join('-'),
+              date: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
               source: income.source,
               description: income.description,
               amount: income.amount.toString()
@@ -908,7 +922,7 @@ const BudgetDashboard: React.FC = () => {
         </button>
       </div>
     </td>
-  );
+  ), [setEditingIncome, setIncomeFormData, setShowIncomeModal, handleDeleteClick]);
 
   // Calculate trend
   const calculateTrend = (current: number, previous: number): number => {
@@ -944,8 +958,9 @@ const BudgetDashboard: React.FC = () => {
         <button
           onClick={() => {
             setEditingExpense(expense);
+            const [month, day, year] = expense.date.split('/');
             setExpenseFormData({
-              date: expense.date.split('/').reverse().join('-'),
+              date: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
               category: expense.category,
               description: expense.description,
               amount: expense.amount.toString(),
@@ -1139,16 +1154,6 @@ const BudgetDashboard: React.FC = () => {
     try {
       await budgetService.deleteIncome(incomeId);
       setIncomeTransactions(prevIncome => prevIncome.filter(income => income.id !== incomeId));
-      
-      // Update budget summary
-      const deletedIncome = incomeTransactions.find(income => income.id === incomeId);
-      if (deletedIncome) {
-        setBudgetSummary(prev => ({
-          ...prev,
-          income: prev.income - deletedIncome.amount,
-          totalIncome: prev.totalIncome - deletedIncome.amount
-        }));
-      }
     } catch (error) {
       console.error('Error deleting income:', error);
       alert('Failed to delete income. Please try again.');
@@ -1182,27 +1187,31 @@ const BudgetDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-900">
       {/* Header */}
-      <header className="bg-gray-800 text-white p-6 shadow-md">
+      <header className="bg-gray-800 text-white p-4 sm:p-6 shadow-md">
         <div className="container mx-auto">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">{"Corey's Budget Dashboard"}</h1>
-            <div className="flex items-center space-x-4">
-              <button 
-                onClick={() => setShowIncomeModal(true)}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-              >
-                Add Income
-              </button>
-              <button 
-                onClick={() => setShowExpenseModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-              >
-                Add Expense
-              </button>
+          <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+            <h1 className="text-xl sm:text-2xl font-bold">{"Corey's Budget Dashboard"}</h1>
+            <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4">
+              <div className="flex space-x-2 sm:space-x-4">
+                <button 
+                  onClick={() => setShowIncomeModal(true)}
+                  className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium"
+                >
+                  <span className="sm:hidden">Income</span>
+                  <span className="hidden sm:inline">Add Income</span>
+                </button>
+                <button 
+                  onClick={() => setShowExpenseModal(true)}
+                  className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium"
+                >
+                  <span className="sm:hidden">Expense</span>
+                  <span className="hidden sm:inline">Add Expense</span>
+                </button>
+              </div>
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-gray-700 text-white rounded-md px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-blue-500 border border-gray-600"
+                className="bg-gray-700 text-white rounded-md px-3 py-2 text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-blue-500 border border-gray-600 w-full sm:w-auto"
               >
                 {months.map((month) => (
                   <option key={month} value={month}>
@@ -1216,13 +1225,13 @@ const BudgetDashboard: React.FC = () => {
       </header>
 
       {/* Main content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
           {/* Income Card */}
-          <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+          <div className="bg-gray-800 rounded-lg shadow p-4 sm:p-6 border border-gray-700">
             <h2 className="text-lg font-medium text-gray-200 mb-2">Income</h2>
-            <p className="text-3xl font-bold text-green-400">
+            <p className="text-2xl sm:text-3xl font-bold text-green-400">
               {budgetSummary.income > 0 ? `$${budgetSummary.income.toLocaleString()}` : "$0.00"}
             </p>
             <div className="flex justify-between items-center mt-4">
@@ -1233,16 +1242,16 @@ const BudgetDashboard: React.FC = () => {
           </div>
 
           {/* Budget Card */}
-          <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+          <div className="bg-gray-800 rounded-lg shadow p-4 sm:p-6 border border-gray-700">
             <h2 className="text-lg font-medium text-gray-200 mb-2">Budget</h2>
-            <p className="text-3xl font-bold text-blue-400">${totalCategoryBudget.toLocaleString()}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-blue-400">${totalCategoryBudget.toLocaleString()}</p>
             <p className="text-sm text-gray-400 mt-4">Total allocated for {formatMonthDisplay(selectedMonth).split(' ')[0]}</p>
           </div>
 
           {/* Spent Card */}
-          <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+          <div className="bg-gray-800 rounded-lg shadow p-4 sm:p-6 border border-gray-700">
             <h2 className="text-lg font-medium text-gray-200 mb-2">Spent</h2>
-            <p className="text-3xl font-bold text-red-400">${budgetSummary.regularSpent.toLocaleString()}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-red-400">${budgetSummary.regularSpent.toLocaleString()}</p>
             <div className="mt-4">
               <div className="w-full bg-gray-700 rounded-full h-2.5">
                 <div
@@ -1261,9 +1270,9 @@ const BudgetDashboard: React.FC = () => {
           </div>
 
           {/* Remaining Card */}
-          <div className="bg-gray-800 rounded-lg shadow p-6 border border-gray-700">
+          <div className="bg-gray-800 rounded-lg shadow p-4 sm:p-6 border border-gray-700">
             <h2 className="text-lg font-medium text-gray-200 mb-2">Remaining</h2>
-            <p className={`text-3xl font-bold ${regularRemaining >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <p className={`text-2xl sm:text-3xl font-bold ${regularRemaining >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               ${Math.abs(regularRemaining).toLocaleString()}
             </p>
             <p className="text-sm text-gray-400 mt-4">
@@ -1300,18 +1309,18 @@ const BudgetDashboard: React.FC = () => {
         </div>
 
         {/* Credit Card Section */}
-        <div className="bg-gray-800 rounded-lg shadow p-6 mb-8 border border-gray-700">
-          <div className="flex justify-between items-center mb-6">
+        <div className="bg-gray-800 rounded-lg shadow p-4 sm:p-6 mb-6 sm:mb-8 border border-gray-700">
+          <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-6">
             <h2 className="text-lg font-medium text-gray-200">Credit Card Tracking</h2>
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
+            <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4">
+              <div className="text-center sm:text-right">
                 <span className="text-sm text-gray-400">Total Available Credit</span>
                 <p className="text-lg font-semibold text-green-400">
                   ${(creditCards.reduce((sum, card) => sum + card.limit, 0) - 
                      Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0)).toLocaleString()}
                 </p>
               </div>
-              <div className="text-right">
+              <div className="text-center sm:text-right">
                 <span className="text-sm text-gray-400">Total Credit Card Debt</span>
                 <p className="text-lg font-semibold text-red-400">
                   ${Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0).toLocaleString()}
@@ -1323,12 +1332,12 @@ const BudgetDashboard: React.FC = () => {
             <table className="min-w-full">
               <thead className="bg-gray-700">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Card</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase">Limit</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase">Spent</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase">Available</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">Statement Date</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">Due Date</th>
+                  <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Card</th>
+                  <th className="px-2 sm:px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase">Limit</th>
+                  <th className="px-2 sm:px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase">Spent</th>
+                  <th className="px-2 sm:px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase">Available</th>
+                  <th className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase hidden sm:table-cell">Statement Date</th>
+                  <th className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase hidden sm:table-cell">Due Date</th>
                 </tr>
               </thead>
               <tbody className="bg-gray-800 divide-y divide-gray-700">
@@ -1355,28 +1364,28 @@ const BudgetDashboard: React.FC = () => {
                   
                   return (
                     <tr key={index} className="hover:bg-gray-700">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-200">{card.name}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-300">${card.limit.toLocaleString()}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                      <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-200">{card.name}</td>
+                      <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm text-right text-gray-300">${card.limit.toLocaleString()}</td>
+                      <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm text-right">
                         <div className="flex flex-col items-end">
                           <span className={`${utilizationPercentage > 80 ? 'text-red-400' : 'text-gray-300'}`}>
                             ${monthlySpent.toLocaleString()}
                           </span>
-                          <div className="w-24 h-1.5 bg-gray-700 rounded-full mt-1">
+                          <div className="w-16 sm:w-24 h-1.5 bg-gray-700 rounded-full mt-1">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${getStatusColor(utilizationPercentage)}`}
                               style={{ width: `${Math.min(utilizationPercentage, 100)}%` }}
                             />
                           </div>
                           <span className="text-xs text-gray-400 mt-1">
-                            {utilizationPercentage.toFixed(1)}% utilized
+                            {utilizationPercentage.toFixed(1)}%
                           </span>
                         </div>
                       </td>
-                      <td className={`px-4 py-3 whitespace-nowrap text-sm text-right ${available < 100 ? 'text-red-400' : 'text-green-400'}`}>
+                      <td className={`px-2 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm text-right ${available < 100 ? 'text-red-400' : 'text-green-400'}`}>
                         ${available.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                      <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm text-center hidden sm:table-cell">
                         <span className={getDateStatusColor(daysUntilStatement)}>
                           {card.statementDate}<sup>th</sup>
                           <span className="text-xs ml-1">
@@ -1384,7 +1393,7 @@ const BudgetDashboard: React.FC = () => {
                           </span>
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                      <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm text-center hidden sm:table-cell">
                         <span className={getDateStatusColor(daysUntilDue)}>
                           {card.dueDate}<sup>th</sup>
                           <span className="text-xs ml-1">
@@ -1396,19 +1405,19 @@ const BudgetDashboard: React.FC = () => {
                   );
                 })}
                 <tr className="bg-gray-700 font-medium">
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-200">Total</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-200">
+                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-sm text-gray-200">Total</td>
+                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm text-right text-gray-200">
                     ${creditCards.reduce((sum, card) => sum + card.limit, 0).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-red-400">
+                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm text-right text-red-400">
                     ${Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-green-400">
+                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm text-right text-green-400">
                     ${(creditCards.reduce((sum, card) => sum + card.limit, 0) - 
                        Object.values(creditCardSpending).reduce((sum, spent) => sum + spent, 0)).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3"></td>
-                  <td className="px-4 py-3"></td>
+                  <td className="px-2 sm:px-4 py-3 hidden sm:table-cell"></td>
+                  <td className="px-2 sm:px-4 py-3 hidden sm:table-cell"></td>
                 </tr>
               </tbody>
             </table>
@@ -1416,36 +1425,53 @@ const BudgetDashboard: React.FC = () => {
         </div>
 
         {/* Income Table */}
-        <div className="bg-gray-800 rounded-lg shadow mb-8 border border-gray-700">
-          <div className="p-6 border-b border-gray-700">
+        <div className="bg-gray-800 rounded-lg shadow mb-6 sm:mb-8 border border-gray-700">
+          <div className="p-4 sm:p-6 border-b border-gray-700">
             <h2 className="text-lg font-medium text-gray-200">Income History</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead className="bg-gray-700">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
+                  <th className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
                     {renderSortButton('income', 'date', 'Date')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
+                  <th className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
                     {renderSortButton('income', 'source', 'Source')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
+                  <th className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase hidden sm:table-cell">
                     {renderSortButton('income', 'description', 'Description')}
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">
+                  <th className="px-2 sm:px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">
                     {renderSortButton('income', 'amount', 'Amount')}
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase">Actions</th>
+                  <th className="px-2 sm:px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-gray-800 divide-y divide-gray-700">
-                {sortedIncome.map(income => (
+                {incomeTransactions
+                  .filter(income => income.month === selectedMonth)
+                  .sort((a, b) => {
+                    const direction = incomeSortConfig.direction === 'asc' ? 1 : -1;
+                    switch (incomeSortConfig.key) {
+                      case 'date':
+                        return direction * (new Date(a.date).getTime() - new Date(b.date).getTime());
+                      case 'source':
+                        return direction * a.source.localeCompare(b.source);
+                      case 'description':
+                        return direction * a.description.localeCompare(b.description);
+                      case 'amount':
+                        return direction * (a.amount - b.amount);
+                      default:
+                        return 0;
+                    }
+                  })
+                  .map(income => (
                   <tr key={income.id} className="group hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.date}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.source}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{income.description}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-400">+${income.amount.toFixed(2)}</td>
+                    <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-300">{income.date}</td>
+                    <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-300">{income.source}</td>
+                    <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-300 hidden sm:table-cell">{income.description}</td>
+                    <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-right font-medium text-green-400">+${income.amount.toFixed(2)}</td>
                     {renderIncomeActions(income)}
                   </tr>
                 ))}
@@ -1740,15 +1766,15 @@ const BudgetDashboard: React.FC = () => {
 
       {/* Expense Modal */}
       {showExpenseModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md border border-gray-700 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-medium text-gray-200 mb-4">{editingExpense ? 'Edit Expense' : 'Add New Expense'}</h3>
             <form onSubmit={editingExpense ? handleExpenseEdit : handleExpenseSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300">Date</label>
                 <input
                   type="date"
-                  value={expenseFormData.date}
+                  value={expenseFormData.date || `${selectedMonth}-01`}
                   onChange={(e) => setExpenseFormData({ ...expenseFormData, date: e.target.value })}
                   className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   required
@@ -1846,15 +1872,15 @@ const BudgetDashboard: React.FC = () => {
 
       {/* Income Modal */}
       {showIncomeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md border border-gray-700 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-medium text-gray-200 mb-4">{editingIncome ? 'Edit Income' : 'Add New Income'}</h3>
             <form onSubmit={editingIncome ? handleIncomeEdit : handleIncomeSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300">Date</label>
                 <input
                   type="date"
-                  value={incomeFormData.date}
+                  value={incomeFormData.date || `${selectedMonth}-01`}
                   onChange={(e) => setIncomeFormData({ ...incomeFormData, date: e.target.value })}
                   className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   required
@@ -1928,8 +1954,8 @@ const BudgetDashboard: React.FC = () => {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmation.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md border border-gray-700">
             <h3 className="text-lg font-medium text-gray-200 mb-4">Confirm Delete</h3>
             <p className="text-sm text-gray-300 mb-4">
               Are you sure you want to delete this {deleteConfirmation.type}? This action cannot be undone.
